@@ -1,0 +1,31 @@
+# ---- Simulation outputs (reproducible, large — do NOT commit) ----
+out_*/
+*_out/
+poc_radiograph_out/
+poc_cone_film_out/
+**/object/
+**/flat/
+
+# ---- Heavy data products ----
+*.root          # phase-space (uproot) — tens of MB each
+*.raw
+*.zraw
+*.mhd
+*.zip
+
+# ---- Keep PNG previews out by default (uncomment to allow) ----
+# *.png
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# ---- macOS ----
+.DS_Store
+
+# NOTE: models/*.stl ARE tracked on purpose (original 3D inputs).
