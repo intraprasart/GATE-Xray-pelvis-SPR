@@ -137,7 +137,12 @@ def compute(phsp_root: str | Path, out_dir: str | Path, cfg: SimConfig,
 
     I_primary = _accumulate(primary_mask)
     I_scatter = _accumulate(~primary_mask)
-    SPR = I_scatter / (I_primary + 1e-12)
+    # SPR is undefined where no primary photons reached the pixel. Those zeros are
+    # almost all low-statistics / off-field artefacts; dividing by a tiny epsilon
+    # there produces ~1e12 spikes that swamp the analysis. Set SPR = 0 instead.
+    SPR = np.divide(I_scatter, I_primary,
+                    out=np.zeros((pix, pix), dtype=np.float64),
+                    where=(I_primary > 0))
 
     if write:
         out_dir.mkdir(parents=True, exist_ok=True)
