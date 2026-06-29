@@ -1,0 +1,72 @@
+"""Command-line entry point (a thin, friendly wrapper over the pipeline).
+
+Examples:
+    python -m gate_pelvis.cli run --stl models/control_mm.stl --out out_control --photons 1000000
+    python -m gate_pelvis.cli compare --control out_control --fracture out_fracture --out roi_analysis
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import fields
+
+from .config import SimConfig
+from .pipeline import run_simulation
+from .analysis import compare_runs, ROI
+
+
+def _add_config_args(p: argparse.ArgumentParser) -> None:
+    defaults = SimConfig(stl="", out="")
+    p.add_argument("--stl", required=True, help="Path to STL mesh (mm)")
+    p.add_argument("--out", default="poc_radiograph_out", help="Output directory")
+    p.add_argument("--clean", action="store_true", help="Delete output dir first")
+    for name in ("photons", "threads", "pix"):
+        p.add_argument(f"--{name}", type=int, default=getattr(defaults, name))
+    for name in ("sod", "odd", "film_xy", "film_thickness", "energy_keV",
+                 "rot_x", "rot_y", "rot_z", "primary_theta_deg", "primary_dE_keV"):
+        p.add_argument(f"--{name}", type=float, default=getattr(defaults, name))
+    p.add_argument("--object_material", default=defaults.object_material)
+    p.add_argument("--no_center_mesh", action="store_true", help="Do not auto-center STL")
+    p.add_argument("--no_phsp", action="store_true", help="Skip phase-space / SPR")
+
+
+def _cfg_from_args(a) -> SimConfig:
+    valid = {f.name for f in fields(SimConfig)}
+    kw = {k: v for k, v in vars(a).items() if k in valid}
+    kw["center_mesh"] = not a.no_center_mesh
+    kw["separate_primary_scatter"] = not a.no_phsp
+    kw["write_phsp"] = not a.no_phsp
+    return SimConfig(**kw)
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="gate_pelvis", description=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    run_p = sub.add_parser("run", help="Run a full flat+object simulation")
+    _add_config_args(run_p)
+
+    cmp_p = sub.add_parser("compare", help="ROI comparison of two runs")
+    cmp_p.add_argument("--control", required=True)
+    cmp_p.add_argument("--fracture", required=True)
+    cmp_p.add_argument("--out", default="roi_analysis")
+    cmp_p.add_argument("--roi", nargs=4, type=int, metavar=("X0", "Y0", "W", "H"),
+                       help="Explicit ROI; omit to auto-detect")
+
+    a = parser.parse_args(argv)
+
+    if a.cmd == "run":
+        cfg = _cfg_from_args(a)
+        run_simulation(cfg, clean=a.clean)
+    elif a.cmd == "compare":
+        roi = ROI(*a.roi) if a.roi else None
+        res = compare_runs(a.control, a.fracture, roi=roi)
+        res.save(a.out)
+        print("Summary:")
+        for k, v in res.summary.items():
+            print(f"  {k}: {v}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,10 +1,12 @@
 # ---- Simulation outputs (reproducible, large — do NOT commit) ----
 out_*/
 *_out/
+runs/
 poc_radiograph_out/
 poc_cone_film_out/
 **/object/
 **/flat/
+config.json
 
 # ---- Heavy data products ----
 *.root          # phase-space (uproot) — tens of MB each

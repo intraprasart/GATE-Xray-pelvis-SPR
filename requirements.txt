@@ -1,12 +1,20 @@
 # Monte Carlo X-ray scattering / SPR pipeline — Python deps
-# Tested on Python 3.10 (macOS / Darwin, single-thread)
+# Tested on Python 3.10 (macOS / Darwin)
 
-opengate        # GATE 10 (Geant4 Python). Pulls Geant4 + data on first run.
+# --- Core simulation ---
+opengate          # GATE 10 (Geant4 Python). Pulls Geant4 + data on first run.
 numpy
-SimpleITK       # read/write .mhd volumes
-matplotlib      # --make_png previews
-uproot          # read phase-space ROOT files (primary/scatter separation)
-trimesh         # only needed for --center_mesh (auto-centering the STL)
+SimpleITK         # read/write .mhd volumes
+matplotlib        # PNG previews
+uproot            # read phase-space ROOT files (primary/scatter separation)
+trimesh           # auto-center the STL mesh
+
+# --- ROI comparison analysis ---
+scipy             # Gaussian / uniform filters
+scikit-image      # local rank-entropy
+
+# --- User interface ---
+streamlit         # web UI:  streamlit run app.py
 
 # Install:  pip install -r requirements.txt
 # GATE 10 docs: https://opengate-python.readthedocs.io/

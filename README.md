@@ -4,8 +4,38 @@ Monte Carlo simulation (OpenGATE 10 / Geant4) ของภาพรังสี 
 เพื่อศึกษา **signature การกระเจิงรังสี (SPR = scatter / primary)** และดูว่า
 สามารถใช้แยก "กระดูกแตก (fracture)" ออกจาก "กระดูกปกติ (control)" ได้หรือไม่
 
-Repo นี้รวม **สคริปต์ทั้งหมด + ไฟล์ 3D ต้นฉบับทั้งหมด + คำสั่งรัน** ให้พกพาไปรันต่อเครื่องอื่นได้ครบ
+Repo นี้รวม **โค้ดเวอร์ชันสะอาด + UI + สคริปต์เดิม + ไฟล์ 3D ต้นฉบับ + คำสั่งรัน** ให้พกพาไปรันต่อเครื่องอื่นได้ครบ
 (ไม่รวมผลลัพธ์ที่จำลองใหม่ได้ — ดู `.gitignore`)
+
+---
+
+## ⭐ เริ่มเร็ว — ใช้งานผ่าน UI (แนะนำ)
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+เบราว์เซอร์จะเปิดหน้า UI ที่:
+- **แท็บ "รันจำลอง"** — เลือกโมเดล STL, ปรับ photons/energy/geometry ด้วย slider, กดรัน แล้วดูภาพผล (film-like, SPR, attenuation) ในหน้าเดียว
+- **แท็บ "เปรียบเทียบ"** — เลือก 2 การรัน (control vs fracture) คำนวณ dSPR / local-STD / entropy พร้อม ROI อัตโนมัติ
+
+> UI สั่ง GATE ผ่าน subprocess ให้อัตโนมัติ (OpenGATE รันได้ 1 engine/process) — ไม่ต้องจำคำสั่ง
+
+### หรือใช้ผ่าน command line
+```bash
+python -m gate_pelvis.cli run --stl models/control_mm.stl --out runs/control --photons 1000000
+python -m gate_pelvis.cli run --stl models/0_54x1000.stl  --out runs/fracture --photons 1000000
+python -m gate_pelvis.cli compare --control runs/control --fracture runs/fracture --out runs/roi_analysis
+```
+
+### หรือใช้เป็นไลบรารีใน Python
+```python
+from gate_pelvis import SimConfig, run_simulation, compare_runs
+cfg = SimConfig(stl="models/control_mm.stl", out="runs/control", photons=1_000_000)
+run_simulation(cfg)
+res = compare_runs("runs/control", "runs/fracture")
+print(res.summary)
+```
 
 ---
 
@@ -13,16 +43,26 @@ Repo นี้รวม **สคริปต์ทั้งหมด + ไฟล
 
 ```
 .
-├── README.md                     # ภาพรวม + วิธีติดตั้ง + คำสั่งรันย่อ
-├── requirements.txt              # Python dependencies
+├── app.py                        # ★ Streamlit UI  (streamlit run app.py)
+├── gate_pelvis/                  # ★ แพ็กเกจเวอร์ชันสะอาด (refactor จากสคริปต์เดิม)
+│   ├── config.py                 #   SimConfig — พารามิเตอร์ทั้งหมดในที่เดียว
+│   ├── imaging.py                #   อ่าน/เขียน .mhd + PNG + ภาพ film-like
+│   ├── phasespace.py             #   phsp.root → primary/scatter/SPR
+│   ├── engine.py                 #   สร้าง+รัน GATE (ไฟล์เดียวที่ import opengate)
+│   ├── _worker.py                #   subprocess worker (1 engine/process)
+│   ├── pipeline.py               #   ออร์เคสเตรต flat+object + post-process
+│   ├── analysis.py               #   เปรียบเทียบ ROI: dSPR / local-STD / entropy
+│   └── cli.py                    #   command-line:  python -m gate_pelvis.cli ...
+├── README.md
+├── requirements.txt              # Python dependencies (รวม streamlit/scipy/skimage)
 ├── docs/
-│   └── RUN_COMMANDS.md           # คำสั่งรันแบบละเอียด จัดหมวด "ต้องโหลด/ไม่ต้องโหลด"
+│   └── RUN_COMMANDS.md           # คำสั่งรันสคริปต์เดิม จัดหมวด "ต้องโหลด/ไม่ต้องโหลด"
 ├── models/                       # ไฟล์ 3D ต้นฉบับ (STL) ที่ใช้ทำการทดลองทั้งหมด
 │   ├── control.stl               #   pelvis ต้นฉบับ (ก่อน scale)
 │   ├── control_mm.stl            #   control ในหน่วย mm  ← ใช้เป็น "ปกติ" ในทุกการรัน
 │   ├── 0_54x1000.stl             #   fracture ช่องว่าง 0.54 mm
 │   └── 0.306x1000.stl            #   fracture ช่องว่าง 0.306 mm
-└── scripts/
+└── scripts/                      # สคริปต์ต้นฉบับเดิม (เก็บไว้อ้างอิง)
     ├── pelvis_AP_primary_scatter/    # ★ pipeline ล่าสุด (แยก primary/scatter + SPR map)
     │   ├── poc_pelvis_radiograph_gate10_AP_primary_scatter_v2.py   # MAIN
     │   └── poc_pelvis_radiograph_gate10_AP_primary_scatter.py      # v1 (อ้างอิง)
