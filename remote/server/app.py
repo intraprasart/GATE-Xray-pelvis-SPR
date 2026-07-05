@@ -651,6 +651,14 @@ let modelsCache = '';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 
+// server เก็บเวลาเป็น UTC (ลงท้าย Z) — แปลงเป็นเวลาไทย (UTC+7, ไม่มี DST) ให้ดู
+const fmtTH = iso => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return new Date(d.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+};
+
 async function api(path, opts = {}) {
   const r = await fetch(path, { credentials: 'same-origin', ...opts });
   if (r.status === 401) { await ensureLogin(true); throw new Error('unauthorized'); }
@@ -745,7 +753,7 @@ async function refresh() {
   tb.innerHTML = jobs.map(j => `<tr>
     <td class="jid">${esc(j.id)}</td><td>${esc(j.type)}</td>
     <td><span class="st ${esc(j.status)}">${esc(j.status)}</span></td>
-    <td>${esc(j.created_at.replace('T', ' ').replace('Z', ''))}</td><td>${esc(j.worker_id || '-')}</td>
+    <td>${esc(fmtTH(j.created_at))}</td><td>${esc(j.worker_id || '-')}</td>
     <td class="actions"><button class="btn btn-ghost btn-sm" onclick="showJob('${esc(j.id)}')">ดู</button>
       ${j.status === 'done' ? `<a class="btn btn-ghost btn-sm" href="/api/jobs/${encodeURIComponent(j.id)}/results.zip" download>zip</a>` : ''}
       ${j.status === 'pending' ? `<button class="btn btn-ghost btn-sm" onclick="cancelJob('${esc(j.id)}')">ยกเลิก</button>` : ''}

@@ -167,6 +167,13 @@ function dur(iso){
   const h=Math.floor(s/3600); s-=h*3600; const m=Math.floor(s/60); const ss=Math.floor(s-m*60);
   return (h?h+'ชม ':'')+(m?m+'น ':'')+ss+'ว';
 }
+// server เก็บเวลาเป็น UTC (ลงท้าย Z) — แปลงเป็นเวลาไทย (UTC+7, ไม่มี DST)
+function fmtTH(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d)) return iso;
+  return new Date(d.getTime()+7*3600*1000).toISOString().slice(0,19).replace('T',' ');
+}
 
 let logEl = null, logStick = true;
 
@@ -175,7 +182,7 @@ async function tick(){
   try{ st = await (await fetch('/api/state',{cache:'no-store'})).json(); }
   catch(e){ $('c_server').innerHTML = '<span class="dot off"></span> monitor error'; return; }
 
-  $('c_clock').textContent = new Date().toLocaleTimeString('th-TH');
+  $('c_clock').textContent = new Date().toLocaleTimeString('th-TH', {timeZone:'Asia/Bangkok'});
 
   // ---- worker เครื่องนี้ ----
   const hb = st.local_worker;
@@ -229,7 +236,7 @@ async function tick(){
   renderQueue(sv.jobs||[]);
   renderWorkers(workers);
   renderRun(sv.running);
-  $('f_update').textContent = 'อัปเดตล่าสุด: '+new Date().toLocaleTimeString('th-TH');
+  $('f_update').textContent = 'อัปเดตล่าสุด: '+new Date().toLocaleTimeString('th-TH', {timeZone:'Asia/Bangkok'});
 }
 
 function setState(s, sub){
@@ -245,7 +252,7 @@ function renderQueue(jobs){
     <td class="id">${esc(j.id)}</td><td class="mono">${esc(j.type)}</td>
     <td><span class="st ${esc(j.status)}">${esc(j.status)}</span></td>
     <td class="mono">${esc(j.worker_id||'-')}</td>
-    <td class="mono">${esc((j.created_at||'').replace('T',' ').replace('Z',''))}</td></tr>`).join('');
+    <td class="mono">${esc(fmtTH(j.created_at))}</td></tr>`).join('');
 }
 
 function renderWorkers(workers){
