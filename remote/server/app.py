@@ -424,70 +424,223 @@ def dashboard():
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="th"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>SPR Job Server</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { font-family: system-ui, 'Segoe UI', sans-serif; }
-  body { margin: 0; background: #f5f6f8; color: #1c2330; }
-  header { background: #14213d; color: #fff; padding: 12px 20px; display: flex;
-           justify-content: space-between; align-items: center; }
-  header h1 { font-size: 18px; margin: 0; }
-  main { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
-  .card { background: #fff; border-radius: 10px; padding: 16px 20px; margin-bottom: 18px;
-          box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-  h2 { font-size: 15px; margin: 0 0 12px; }
-  label { font-size: 13px; display: block; margin: 8px 0 2px; color: #444; }
-  input, select { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; width: 100%;
-                  box-sizing: border-box; font-size: 14px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-  button { background: #14213d; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px;
-           cursor: pointer; font-size: 14px; }
-  button.small { padding: 3px 10px; font-size: 12px; }
-  button.ghost { background: #e5e7eb; color: #1c2330; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #eee; }
-  .st { padding: 2px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; }
-  .st.pending { background:#fef3c7; color:#92400e; } .st.running { background:#dbeafe; color:#1d4ed8; }
-  .st.done { background:#d1fae5; color:#065f46; } .st.failed { background:#fee2e2; color:#991b1b; }
-  .st.cancelled { background:#e5e7eb; color:#4b5563; }
-  pre { background: #0f172a; color: #cbd5e1; padding: 12px; border-radius: 8px; font-size: 12px;
-        max-height: 320px; overflow: auto; white-space: pre-wrap; }
-  .imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-  .imgs figure { margin: 0; } .imgs img { width: 100%; border-radius: 6px; border: 1px solid #ddd; }
-  .imgs figcaption { font-size: 11px; color: #555; word-break: break-all; }
-  #workerline { font-size: 12px; color: #cbd5e1; }
-  dialog { border: 0; border-radius: 12px; width: min(950px, 94vw); max-height: 90vh; }
-  .metrics td:first-child { color: #555; }
+  :root{
+    --bg:#f3f4f6; --surface:#ffffff; --surface-alt:#fbfafb;
+    --fg:#191c22; --fg-muted:#5b6472; --fg-soft:#64748b;
+    --border:#e7e9ee; --border-strong:#d4d8e0;
+    --primary:#c1121f; --primary-hover:#9a0e18; --primary-active:#7d0b13;
+    --primary-tint:#fef2f3; --primary-tint-2:#fbdfe2;
+    --ring:rgba(193,18,31,.35);
+    --ok:#16a34a; --ok-text:#15803d; --off:#d92b38;
+    --font-sans:'Fira Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --font-mono:'Fira Code',ui-monospace,'SF Mono','Cascadia Code',monospace;
+    --shadow-sm:0 1px 2px rgba(16,20,28,.05),0 1px 3px rgba(16,20,28,.05);
+    --shadow-md:0 6px 24px rgba(16,20,28,.10);
+    --radius:14px; --radius-sm:9px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-sans);
+       font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+
+  /* ---------- header ---------- */
+  header{position:sticky;top:0;z-index:40;
+    background:linear-gradient(135deg,#c1121f 0%,#8b0d16 60%,#6d0a11 100%);
+    color:#fff;padding:14px 22px;display:flex;flex-wrap:wrap;gap:12px;
+    justify-content:space-between;align-items:center;
+    box-shadow:0 2px 12px rgba(109,10,17,.30);}
+  .brand{display:flex;align-items:center;gap:13px;min-width:0;}
+  .brand-icon{width:40px;height:40px;flex:none;display:grid;place-items:center;
+    border-radius:11px;background:rgba(255,255,255,.14);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);}
+  .brand-icon svg{width:23px;height:23px;stroke:#fff;}
+  .brand h1{font-size:18px;line-height:1.15;margin:0;font-weight:700;letter-spacing:.2px;}
+  .brand-sub{margin:1px 0 0;font-family:var(--font-mono);font-size:11.5px;
+    color:#ffd9dc;letter-spacing:.3px;}
+  .worker-status{display:inline-flex;align-items:center;gap:8px;
+    font-size:12.5px;font-weight:500;color:#ffe7e9;
+    background:rgba(0,0,0,.16);padding:6px 12px;border-radius:999px;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);}
+  .wdot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--fg-soft);}
+  .wdot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(34,197,94,.30);}
+  .wdot.off{background:var(--off);box-shadow:0 0 0 3px rgba(217,43,56,.35);}
+
+  /* ---------- layout ---------- */
+  main{max-width:1120px;margin:22px auto;padding:0 16px;}
+  .card{background:var(--surface);border-radius:var(--radius);
+    border:1px solid var(--border);padding:20px 22px;margin-bottom:18px;
+    box-shadow:var(--shadow-sm);}
+  .card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+  .card-head h2{position:relative;font-size:15px;margin:0;font-weight:600;
+    padding-left:12px;color:var(--fg);}
+  .card-head h2::before{content:"";position:absolute;left:0;top:2px;bottom:2px;
+    width:4px;border-radius:3px;background:var(--primary);}
+  .card-hint{font-family:var(--font-mono);font-size:11.5px;color:var(--fg-soft);}
+  .card-head .btn{margin-left:auto;}
+
+  /* ---------- form ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0;}
+  label{font-size:12.5px;font-weight:500;color:var(--fg-muted);}
+  input,select{padding:9px 11px;border:1px solid var(--border-strong);
+    border-radius:var(--radius-sm);width:100%;font-size:14px;font-family:inherit;
+    color:var(--fg);background:var(--surface);min-height:40px;
+    transition:border-color .15s ease,box-shadow .15s ease;}
+  input[type=number]{font-family:var(--font-mono);}
+  input:hover,select:hover{border-color:#b9bfca;}
+  input:focus,select:focus{outline:none;border-color:var(--primary);
+    box-shadow:0 0 0 3px var(--ring);}
+  select{cursor:pointer;appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 10px center;padding-right:34px;}
+  .form-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    margin:18px 0 0;padding-top:16px;border-top:1px solid var(--border);}
+  .submit-msg{font-size:13px;font-weight:500;}
+  .submit-msg.ok{color:var(--ok-text);} .submit-msg.err{color:var(--primary);}
+
+  /* ---------- buttons ---------- */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    border:1px solid transparent;border-radius:var(--radius-sm);cursor:pointer;text-decoration:none;
+    font-family:inherit;font-size:14px;font-weight:600;padding:0 18px;min-height:42px;
+    transition:background .15s ease,border-color .15s ease,transform .06s ease,box-shadow .15s ease;
+    white-space:nowrap;}
+  .btn svg{width:16px;height:16px;stroke:currentColor;flex:none;}
+  .btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ring);}
+  .btn:active{transform:translateY(1px);}
+  .btn-primary{background:var(--primary);color:#fff;}
+  .btn-primary:hover{background:var(--primary-hover);}
+  .btn-primary:active{background:var(--primary-active);}
+  .btn-primary:disabled{opacity:.85;cursor:progress;}
+  .btn-ghost{background:var(--surface);color:var(--fg);border-color:var(--border-strong);}
+  .btn-ghost:hover{background:var(--primary-tint);border-color:var(--primary-tint-2);color:var(--primary-hover);}
+  .btn-sm{min-height:32px;padding:0 12px;font-size:12.5px;font-weight:500;border-radius:7px;gap:5px;}
+  .btn-sm svg{width:14px;height:14px;}
+  .spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.45);
+    border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- table ---------- */
+  .table-wrap{overflow-x:auto;margin:0 -4px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:560px;}
+  thead th{text-align:left;padding:9px 10px;font-size:11px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.5px;color:var(--fg-soft);
+    border-bottom:2px solid var(--border);white-space:nowrap;}
+  tbody td{padding:11px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tbody tr{transition:background .12s ease;}
+  tbody tr:hover{background:var(--primary-tint);}
+  td.jid{font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);}
+  td.actions{white-space:nowrap;text-align:right;}
+  td.actions .btn{margin-left:6px;}
+  .empty{padding:34px 10px;text-align:center;color:var(--fg-soft);}
+  .empty svg{width:34px;height:34px;stroke:var(--border-strong);margin-bottom:8px;}
+
+  /* ---------- status pills ---------- */
+  .st{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+    font-size:11.5px;font-weight:600;line-height:1.4;letter-spacing:.2px;}
+  .st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;}
+  .st.pending{background:#fef3c7;color:#92400e;} .st.running{background:#ffe8d1;color:#c2410c;}
+  .st.done{background:#dcfce7;color:#15803d;} .st.failed{background:var(--primary-tint-2);color:var(--primary-active);}
+  .st.cancelled{background:#eef0f3;color:#4b5563;}
+
+  /* ---------- dialog ---------- */
+  dialog{border:0;border-radius:16px;width:min(950px,94vw);max-height:90vh;padding:0;
+    box-shadow:var(--shadow-md);color:var(--fg);}
+  dialog::backdrop{background:rgba(24,10,12,.45);backdrop-filter:blur(2px);}
+  .dlg-inner{padding:22px 24px;}
+  #dlg_title{font-family:var(--font-mono);font-size:14.5px;font-weight:600;
+    margin:0 0 16px;padding-bottom:12px;border-bottom:1px solid var(--border);color:var(--fg);
+    word-break:break-word;overflow-wrap:anywhere;}
+  .metrics{width:100%;border-collapse:collapse;font-size:13px;}
+  .metrics td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  .metrics td:first-child{color:var(--fg-muted);width:34%;font-weight:500;}
+  .metrics code{font-family:var(--font-mono);font-size:12px;color:var(--fg);
+    background:var(--surface-alt);padding:1px 5px;border-radius:5px;
+    word-break:break-all;border:1px solid var(--border);}
+  .imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:14px;}
+  .imgs figure{margin:0;}
+  .imgs img{width:100%;border-radius:9px;border:1px solid var(--border-strong);display:block;
+    transition:box-shadow .15s ease;}
+  .imgs a:hover img{box-shadow:0 0 0 3px var(--primary-tint-2);}
+  .imgs figcaption{font-family:var(--font-mono);font-size:10.5px;color:var(--fg-soft);
+    word-break:break-all;margin-top:4px;}
+  pre{background:#161b22;color:#d7dde5;padding:14px;border-radius:10px;font-size:12px;
+    font-family:var(--font-mono);max-height:320px;overflow:auto;white-space:pre-wrap;
+    border:1px solid #23303f;}
+  .dlg-foot{text-align:right;margin:16px 0 0;padding-top:14px;border-top:1px solid var(--border);}
+  .dlg-log-title{font-size:13px;font-weight:600;color:var(--fg-muted);margin:16px 0 8px;}
+
+  @media (max-width:560px){
+    header{padding:12px 16px;} .brand h1{font-size:16px;}
+    main{margin:16px auto;} .card{padding:16px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important;}
+  }
 </style></head><body>
-<header><h1>🩻 SPR Job Server — GATE X-ray pelvis</h1><div id="workerline">…</div></header>
+<header>
+  <div class="brand">
+    <span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/><path d="M9 8v8"/><path d="M15 8v8"/></svg></span>
+    <div class="brand-text">
+      <h1>SPR Job Server</h1>
+      <p class="brand-sub">GATE · Monte Carlo X-ray pelvis</p>
+    </div>
+  </div>
+  <div id="workerline" class="worker-status"><span class="wdot"></span>กำลังเชื่อมต่อ…</div>
+</header>
 <main>
-  <div class="card"><h2>ส่งงานใหม่ (run_pair: control + fracture + เปรียบเทียบ)</h2>
+  <section class="card">
+    <div class="card-head">
+      <h2>ส่งงานใหม่</h2>
+      <span class="card-hint">run_pair: control + fracture + เปรียบเทียบ</span>
+    </div>
     <div class="grid">
-      <div><label>ประเภทงาน</label>
+      <div class="field"><label for="jtype">ประเภทงาน</label>
         <select id="jtype"><option value="run_pair">run_pair (control vs fracture)</option>
         <option value="run">run (โมเดลเดียว)</option></select></div>
-      <div><label>Control STL</label><select id="control_stl"></select></div>
-      <div id="fr_wrap"><label>Fracture STL</label><select id="fracture_stl"></select></div>
-      <div><label>Photons</label><input id="photons" type="number" value="1000000"></div>
-      <div><label>Energy (keV)</label><input id="energy" type="number" value="80"></div>
-      <div><label>Pixels</label><input id="pix" type="number" value="512"></div>
-      <div><label>โหมดการรัน (CPU)</label>
+      <div class="field"><label for="control_stl">Control STL</label><select id="control_stl"></select></div>
+      <div class="field" id="fr_wrap"><label for="fracture_stl">Fracture STL</label><select id="fracture_stl"></select></div>
+      <div class="field"><label for="photons">Photons</label><input id="photons" type="number" value="1000000"></div>
+      <div class="field"><label for="energy">Energy (keV)</label><input id="energy" type="number" value="80"></div>
+      <div class="field"><label for="pix">Pixels</label><input id="pix" type="number" value="512"></div>
+      <div class="field"><label for="mode">โหมดการรัน (CPU)</label>
         <select id="mode">
           <option value="single">single — 1 คอร์ (เบาที่สุด)</option>
           <option value="balanced" selected>balanced — เว้น 2 คอร์ให้เครื่อง</option>
           <option value="max">max — ใช้ CPU/RAM เต็มเครื่อง</option>
         </select></div>
     </div>
-    <p><button onclick="submitJob()">🚀 ส่งงาน</button> <span id="submitmsg"></span></p>
-  </div>
-  <div class="card"><h2>รายการงาน <button class="small ghost" onclick="refresh()">รีเฟรช</button></h2>
-    <table><thead><tr><th>ID</th><th>ประเภท</th><th>สถานะ</th><th>สร้างเมื่อ</th><th>เครื่อง</th><th></th></tr></thead>
-    <tbody id="jobs"></tbody></table>
-  </div>
+    <div class="form-actions">
+      <button id="submitBtn" class="btn btn-primary" onclick="submitJob()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" aria-hidden="true" focusable="false"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4Z"/></svg>
+        ส่งงาน</button>
+      <span id="submitmsg" class="submit-msg"></span>
+    </div>
+  </section>
+  <section class="card">
+    <div class="card-head">
+      <h2>รายการงาน</h2>
+      <button class="btn btn-ghost btn-sm" onclick="refresh()">
+        <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        รีเฟรช</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>ประเภท</th><th>สถานะ</th><th>สร้างเมื่อ</th><th>เครื่อง</th><th></th></tr></thead>
+        <tbody id="jobs"></tbody>
+      </table>
+    </div>
+  </section>
 </main>
-<dialog id="dlg"><div style="padding:18px">
-  <h2 id="dlg_title" style="font-size:15px"></h2>
+<dialog id="dlg" aria-labelledby="dlg_title"><div class="dlg-inner">
+  <h2 id="dlg_title"></h2>
   <div id="dlg_body"></div>
-  <p style="text-align:right"><button class="ghost" onclick="dlg.close()">ปิด</button></p>
+  <div class="dlg-foot"><button class="btn btn-ghost btn-sm" onclick="dlg.close()">ปิด</button></div>
 </div></dialog>
 <script>
 const dlg = document.getElementById('dlg');
@@ -541,13 +694,16 @@ async function loadModels() {
       }
     }
     const online = ws.filter(w => Date.now() - Date.parse(w.last_seen) < 90000);
-    document.getElementById('workerline').textContent = online.length
-      ? `🟢 worker ออนไลน์: ${online.map(w => w.worker_id).join(', ')}`
-      : '🔴 ไม่มี worker ออนไลน์';
+    const line = document.getElementById('workerline');
+    line.innerHTML = online.length
+      ? `<span class="wdot on"></span>worker ออนไลน์: ${esc(online.map(w => w.worker_id).join(', '))}`
+      : '<span class="wdot off"></span>ไม่มี worker ออนไลน์';
   } catch (e) { /* 401 handled in api() */ }
 }
 
 async function submitJob() {
+  const btn = document.getElementById('submitBtn');
+  const msg = document.getElementById('submitmsg');
   const t = document.getElementById('jtype').value;
   const p = {
     photons: +document.getElementById('photons').value,
@@ -559,25 +715,42 @@ async function submitJob() {
     p.control_stl = document.getElementById('control_stl').value;
     p.fracture_stl = document.getElementById('fracture_stl').value;
   } else { p.stl = document.getElementById('control_stl').value; }
-  const r = await api('/api/jobs', { method: 'POST',
-    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: t, params: p }) });
-  document.getElementById('submitmsg').textContent = r.ok ? '✅ ส่งแล้ว' : '❌ ' + esc(await r.text());
-  refresh();
+  btn.disabled = true;
+  const html0 = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span>กำลังส่ง…';
+  msg.textContent = '';
+  try {
+    const r = await api('/api/jobs', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: t, params: p }) });
+    if (r.ok) { msg.className = 'submit-msg ok'; msg.textContent = 'ส่งงานสำเร็จ'; }
+    else { msg.className = 'submit-msg err'; msg.textContent = 'ส่งไม่สำเร็จ: ' + (await r.text()); }
+  } catch (e) {
+    msg.className = 'submit-msg err'; msg.textContent = 'ส่งไม่สำเร็จ';
+  } finally {
+    btn.disabled = false; btn.innerHTML = html0; refresh();
+  }
 }
 
 async function refresh() {
   let jobs;
   try { const r = await api('/api/jobs'); if (!r.ok) return; jobs = await r.json(); }
   catch (e) { return; }
-  document.getElementById('jobs').innerHTML = jobs.map(j => `<tr>
-    <td style="font-family:monospace">${esc(j.id)}</td><td>${esc(j.type)}</td>
+  const tb = document.getElementById('jobs');
+  if (!jobs.length) {
+    tb.innerHTML = `<tr><td colspan="6"><div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+      <div>ยังไม่มีงานในคิว</div></div></td></tr>`;
+    return;
+  }
+  tb.innerHTML = jobs.map(j => `<tr>
+    <td class="jid">${esc(j.id)}</td><td>${esc(j.type)}</td>
     <td><span class="st ${esc(j.status)}">${esc(j.status)}</span></td>
     <td>${esc(j.created_at.replace('T', ' ').replace('Z', ''))}</td><td>${esc(j.worker_id || '-')}</td>
-    <td><button class="small" onclick="showJob('${esc(j.id)}')">ดู</button>
-      ${j.status === 'done' ? `<a href="/api/jobs/${encodeURIComponent(j.id)}/results.zip"><button class="small ghost">zip</button></a>` : ''}
-      ${j.status === 'pending' ? `<button class="small ghost" onclick="cancelJob('${esc(j.id)}')">ยกเลิก</button>` : ''}
-      ${j.status === 'running' ? `<button class="small ghost" onclick="forceFail('${esc(j.id)}')">บังคับปิด</button>` : ''}
-      ${j.status !== 'running' ? `<button class="small ghost" onclick="delJob('${esc(j.id)}')">ลบ</button>` : ''}
+    <td class="actions"><button class="btn btn-ghost btn-sm" onclick="showJob('${esc(j.id)}')">ดู</button>
+      ${j.status === 'done' ? `<a class="btn btn-ghost btn-sm" href="/api/jobs/${encodeURIComponent(j.id)}/results.zip" download>zip</a>` : ''}
+      ${j.status === 'pending' ? `<button class="btn btn-ghost btn-sm" onclick="cancelJob('${esc(j.id)}')">ยกเลิก</button>` : ''}
+      ${j.status === 'running' ? `<button class="btn btn-ghost btn-sm" onclick="forceFail('${esc(j.id)}')">บังคับปิด</button>` : ''}
+      ${j.status !== 'running' ? `<button class="btn btn-ghost btn-sm" onclick="delJob('${esc(j.id)}')">ลบ</button>` : ''}
     </td></tr>`).join('');
 }
 
@@ -596,7 +769,7 @@ async function showJob(id) {
   let html = `<table class="metrics"><tr><td>พารามิเตอร์</td><td><code>${esc(JSON.stringify(j.params))}</code></td></tr>`;
   if (j.metrics) for (const [k, v] of Object.entries(j.metrics))
     html += `<tr><td>${esc(k)}</td><td>${esc(typeof v === 'number' ? v.toPrecision(6) : v)}</td></tr>`;
-  if (j.error) html += `<tr><td>error</td><td style="color:#b91c1c">${esc(j.error)}</td></tr>`;
+  if (j.error) html += `<tr><td>error</td><td style="color:var(--primary)">${esc(j.error)}</td></tr>`;
   html += '</table>';
   const pngs = files.filter(f => f.endsWith('.png'));
   if (pngs.length) html += '<div class="imgs">' + pngs.map(f => {
@@ -604,7 +777,7 @@ async function showJob(id) {
     return `<figure><a href="${u}" target="_blank"><img loading="lazy" src="${u}"></a>
             <figcaption>${esc(f)}</figcaption></figure>`;
   }).join('') + '</div>';
-  html += `<h2 style="margin-top:14px">Log</h2><pre>${esc(j.log || '(ว่าง)')}</pre>`;
+  html += `<div class="dlg-log-title">Log</div><pre>${esc(j.log || '(ว่าง)')}</pre>`;
   document.getElementById('dlg_body').innerHTML = html;
   if (!dlg.open) dlg.showModal();
   const pre = document.querySelector('#dlg_body pre'); if (pre) pre.scrollTop = pre.scrollHeight;
