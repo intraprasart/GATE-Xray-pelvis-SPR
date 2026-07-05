@@ -29,6 +29,7 @@ env/
 
 # ---- Remote worker/server (คีย์ลับอยู่ใน config.json ซึ่ง ignore ไว้ด้านบนแล้ว) ----
 remote/worker/worker.log
+remote/worker/worker.heartbeat
 *.log
 remote/server/data*/
 remote/server/.env

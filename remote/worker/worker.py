@@ -51,6 +51,69 @@ HEADERS = {"X-API-Key": KEY}
 SESSION = requests.Session()
 SESSION.headers.update(HEADERS)
 
+HEARTBEAT_FILE = HERE / "worker.heartbeat"
+HEARTBEAT_INTERVAL = 10       # เขียนซ้ำทุก 10s ให้ monitor รู้ว่ายังไม่ตาย (แม้กำลังรันงานยาว)
+_RUN = {"started_at": None, "done": 0, "failed": 0,
+        "last_job": None, "state": "starting", "job": None}
+
+
+def write_heartbeat() -> None:
+    """บันทึกสถานะ worker ปัจจุบัน (จาก _RUN) ให้ monitor ในเครื่องอ่านได้"""
+    hb = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "worker_id": WORKER_ID, "server": SERVER, "pid": os.getpid(),
+        "state": _RUN["state"],               # "starting" | "idle" | "busy" | "offline"
+        "job": _RUN["job"],                   # {id, type} ของงานที่กำลังรัน
+        "started_at": _RUN["started_at"],
+        "done": _RUN["done"], "failed": _RUN["failed"],
+        "last_job": _RUN["last_job"],
+        "poll_seconds": POLL_SECONDS,
+    }
+    try:
+        HEARTBEAT_FILE.write_text(json.dumps(hb, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def set_state(state: str, job: dict | None = None) -> None:
+    _RUN["state"], _RUN["job"] = state, job
+    write_heartbeat()
+
+
+def _heartbeat_loop() -> None:
+    """เธรดเบื้องหลัง: รีเฟรช heartbeat local สม่ำเสมอ + ปิง server ให้เห็นว่า
+    worker ยังออนไลน์ แม้กำลังรันงาน sharded ยาว ๆ ที่ไม่ได้ส่ง log ระหว่างนั้น
+    (กัน dashboard/monitor แสดง worker เป็นออฟไลน์ทั้งที่กำลังทำงาน)"""
+    last_ping = 0.0
+    while True:
+        time.sleep(HEARTBEAT_INTERVAL)
+        write_heartbeat()
+        if time.monotonic() - last_ping > 60:
+            try:
+                register()
+                last_ping = time.monotonic()
+            except requests.RequestException:
+                pass
+
+
+_LOCK_SOCK = None
+
+
+def acquire_single_instance() -> None:
+    """กัน worker ซ้อนกันหลายตัว (auto-restart/Startup อาจสตาร์ตซ้ำ) — worker
+    ชื่อเดียวกันสองตัวจะแย่ง claim งานและเขียน heartbeat ทับกัน. ใช้ผูก localhost
+    socket เป็น mutex: ตัวที่สองจะ bind ไม่ได้แล้วออกทันที."""
+    global _LOCK_SOCK
+    port = int(CFG.get("lock_port", 8788))
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", port))   # ไม่ตั้ง SO_REUSEADDR → ตัวที่สอง bind ไม่ผ่าน
+        s.listen(1)
+    except OSError:
+        log_local(f"มี worker รันอยู่แล้ว (lock port {port}) — ออกโดยไม่ทำงานซ้ำ")
+        raise SystemExit(0)
+    _LOCK_SOCK = s   # ถือ socket ไว้ตลอดอายุโปรเซส
+
 # ไฟล์ผลลัพธ์ที่ส่งกลับ (ไม่รวม .root ซึ่งใหญ่ระดับ GB)
 RESULT_EXTS = {".png", ".mhd", ".raw", ".zraw", ".csv", ".json", ".txt"}
 MAX_RESULT_FILE_BYTES = 300 * 1024 * 1024
@@ -376,8 +439,12 @@ def handle_job(job: dict) -> None:
 
 
 def main() -> None:
+    acquire_single_instance()
+    _RUN["started_at"] = datetime.now(timezone.utc).isoformat()
     log_local(f"SPR worker '{WORKER_ID}' เริ่มทำงาน -> {SERVER}")
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    set_state("starting")
+    threading.Thread(target=_heartbeat_loop, daemon=True).start()
     last_register = 0.0
     while True:
         try:
@@ -387,22 +454,30 @@ def main() -> None:
             job = claim()
         except requests.RequestException as e:
             log_local(f"ติดต่อ server ไม่ได้: {e} — รอ 30s")
+            set_state("idle")     # ยังมีชีวิต แต่ต่อ server ไม่ติด
             time.sleep(30)
             continue
         if job is None:
+            set_state("idle")
             time.sleep(POLL_SECONDS)
             continue
         log_local(f"ได้งาน {job['id']} ({job['type']})")
+        set_state("busy", {"id": job["id"], "type": job["type"]})
         try:
             handle_job(job)
+            _RUN["done"] += 1
+            _RUN["last_job"] = {"id": job["id"], "type": job["type"], "result": "done"}
             log_local(f"งาน {job['id']} เสร็จสมบูรณ์")
         except Exception as e:  # noqa: BLE001 — worker ต้องไม่ตายเพราะงานเดียว
+            _RUN["failed"] += 1
+            _RUN["last_job"] = {"id": job["id"], "type": job["type"], "result": "failed"}
             log_local(f"งาน {job['id']} ล้มเหลว: {e}")
             send_log(job["id"], f"\nERROR: {e}\n")
             try:
                 complete(job["id"], "failed", None, str(e), None)
             except Exception as e2:  # noqa: BLE001
                 log_local(f"รายงานความล้มเหลวไม่สำเร็จ: {e2}")
+        set_state("idle")
 
 
 if __name__ == "__main__":

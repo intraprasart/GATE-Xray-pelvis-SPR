@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPR Monitor — คิวงาน</title>
+<style>
+  :root{
+    --ink:#0a0e13; --panel:#121820; --panel2:#18202b; --line:#26313f;
+    --text:#cdd6e2; --muted:#7d8b9c; --dim:#54606f;
+    --phosphor:#45d6cf; --scatter:#c98be0;
+    --good:#4fd18b; --warn:#e6b04d; --crit:#f0616a; --run:#4aa8ff;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,monospace;
+    --sans:"Inter",ui-sans-serif,system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);
+    background-image:radial-gradient(1200px 520px at 82% -10%,rgba(69,214,207,.08),transparent 60%),
+      radial-gradient(760px 460px at 4% 2%,rgba(201,139,224,.06),transparent 55%);
+    background-attachment:fixed;min-height:100vh}
+  .wrap{max-width:1400px;margin:0 auto;padding:16px 20px 40px}
+
+  header{display:flex;align-items:center;gap:16px;padding:8px 0 18px;flex-wrap:wrap}
+  header .brand{font-family:var(--mono);font-size:18px;font-weight:600;color:#eaf1f8;letter-spacing:.02em}
+  header .brand .k{color:var(--phosphor)}
+  header .spacer{flex:1}
+  .chip{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;
+    padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text)}
+  .dot{width:8px;height:8px;border-radius:50%;box-shadow:0 0 9px currentColor;flex:none}
+  .dot.on{background:var(--good);color:var(--good);animation:pulse 2.2s ease-in-out infinite}
+  .dot.off{background:var(--crit);color:var(--crit)}
+  .dot.warn{background:var(--warn);color:var(--warn)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .banner{border-radius:10px;padding:11px 16px;margin-bottom:14px;font-family:var(--mono);font-size:13px;display:none}
+  .banner.show{display:block}
+  .banner.crit{background:rgba(240,97,106,.12);border:1px solid rgba(240,97,106,.35);color:#ffb3b7}
+  .banner.warn{background:rgba(230,176,77,.12);border:1px solid rgba(230,176,77,.32);color:#f0cd8a}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+  @media (max-width:820px){.kpis{grid-template-columns:1fr 1fr}}
+  .kpi{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:12px;padding:15px 16px;position:relative;overflow:hidden}
+  .kpi .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .kpi .big{font-family:var(--mono);font-size:30px;font-weight:600;color:#eaf1f8;line-height:1.1;margin-top:8px;
+    font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:8px}
+  .kpi .sub{font-size:12px;color:var(--muted);margin-top:5px}
+  .kpi.state .big{font-size:24px}
+  .badge{font-family:var(--mono);font-size:13px;font-weight:600;padding:4px 12px;border-radius:7px;letter-spacing:.04em}
+  .badge.idle{background:rgba(79,209,139,.14);color:var(--good)}
+  .badge.busy{background:rgba(74,168,255,.16);color:var(--run)}
+  .badge.offline{background:rgba(240,97,106,.16);color:var(--crit)}
+  .badge.starting{background:rgba(230,176,77,.16);color:var(--warn)}
+
+  .grid{display:grid;grid-template-columns:1.6fr 1fr;gap:14px}
+  @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:0;overflow:hidden}
+  .card h2{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);
+    margin:0;padding:13px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .card h2 .n{color:var(--phosphor)}
+  .card .body{padding:6px 0}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  .tw{overflow-x:auto}
+  th,td{text-align:left;padding:9px 14px;white-space:nowrap}
+  th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600}
+  tbody tr{border-top:1px solid var(--line)}
+  td.id{font-family:var(--mono);font-size:12px;color:var(--text)}
+  td.mono{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .st{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.05em;
+    padding:2px 9px;border-radius:6px;text-transform:uppercase}
+  .st.pending{background:rgba(230,176,77,.14);color:var(--warn)}
+  .st.running{background:rgba(74,168,255,.16);color:var(--run)}
+  .st.done{background:rgba(79,209,139,.14);color:var(--good)}
+  .st.failed{background:rgba(240,97,106,.15);color:var(--crit)}
+  .st.cancelled{background:rgba(125,139,156,.16);color:var(--muted)}
+  tr.isrun{background:rgba(74,168,255,.06)}
+
+  .wk{display:flex;align-items:center;gap:11px;padding:11px 16px;border-top:1px solid var(--line);font-size:13px}
+  .wk:first-child{border-top:0}
+  .wk .nm{font-family:var(--mono);color:var(--text)}
+  .wk .meta{color:var(--muted);font-size:11.5px}
+  .wk .spacer{flex:1}
+
+  .runwrap{margin-top:14px}
+  .run-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid var(--line)}
+  .run-head .jid{font-family:var(--mono);font-size:15px;color:#eaf1f8}
+  .run-head .el{font-family:var(--mono);font-size:13px;color:var(--run);font-variant-numeric:tabular-nums}
+  .run-head .pm{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  pre{margin:0;background:#080b10;color:#a9b6c6;font-family:var(--mono);font-size:12px;line-height:1.5;
+    padding:14px 16px;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  .empty{padding:26px 16px;text-align:center;color:var(--dim);font-family:var(--mono);font-size:13px}
+
+  footer{margin-top:20px;color:var(--dim);font-family:var(--mono);font-size:11.5px;display:flex;gap:16px;flex-wrap:wrap}
+</style></head><body>
+<div class="wrap">
+  <header>
+    <span class="brand">🩻 SPR <span class="k">Monitor</span></span>
+    <span class="chip" id="c_worker"><span class="dot warn"></span> …</span>
+    <span class="chip" id="c_server"><span class="dot warn"></span> server …</span>
+    <span class="spacer"></span>
+    <span class="chip" id="c_clock" style="color:var(--muted)">—</span>
+  </header>
+
+  <div class="banner crit" id="ban_worker"></div>
+  <div class="banner warn" id="ban_server"></div>
+
+  <div class="kpis">
+    <div class="kpi state"><div class="lab">เครื่องนี้ (worker)</div>
+      <div class="big"><span id="k_state" class="badge starting">…</span></div>
+      <div class="sub" id="k_uptime">—</div></div>
+    <div class="kpi"><div class="lab">worker ที่เชื่อมต่อ</div>
+      <div class="big"><span id="k_wonline">–</span><span class="sub" style="margin:0">ออนไลน์</span></div>
+      <div class="sub" id="k_wtotal">—</div></div>
+    <div class="kpi"><div class="lab">คิวรอ (pending)</div>
+      <div class="big"><span id="k_pending">–</span></div>
+      <div class="sub" id="k_running">—</div></div>
+    <div class="kpi"><div class="lab">ผลงาน (session นี้)</div>
+      <div class="big"><span id="k_done" style="color:var(--good)">–</span>
+        <span style="color:var(--dim);font-size:20px">/</span>
+        <span id="k_failed" style="color:var(--crit);font-size:22px">–</span></div>
+      <div class="sub">สำเร็จ / ล้มเหลว</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>คิวงาน <span class="n" id="q_count">0</span> รายการล่าสุด</h2>
+      <div class="body tw"><table>
+        <thead><tr><th>ID</th><th>ประเภท</th><th>สถานะ</th><th>เครื่อง</th><th>เวลา</th></tr></thead>
+        <tbody id="q_body"></tbody></table>
+        <div class="empty" id="q_empty" style="display:none">ยังไม่มีงานในคิว</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>ใครเชื่อมต่ออยู่ <span class="n" id="w_count">0</span></h2>
+      <div class="body" id="w_body"></div>
+    </div>
+  </div>
+
+  <div class="card runwrap">
+    <h2>กำลังรัน — log สด</h2>
+    <div id="run_area"><div class="empty" id="run_empty">ว่าง — worker รอรับงาน</div></div>
+  </div>
+
+  <footer>
+    <span id="f_update">อัปเดตล่าสุด: —</span>
+    <span>รีเฟรชทุก 2 วินาที</span>
+    <span id="f_server">—</span>
+  </footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function ago(iso){
+  if(!iso) return '—';
+  const s = Math.max(0,(Date.now()-Date.parse(iso))/1000);
+  if(s<60) return Math.floor(s)+' วิ';
+  if(s<3600) return Math.floor(s/60)+' นาที';
+  if(s<86400) return Math.floor(s/3600)+' ชม.';
+  return Math.floor(s/86400)+' วัน';
+}
+function dur(iso){
+  if(!iso) return '—';
+  let s = Math.max(0,(Date.now()-Date.parse(iso))/1000);
+  const h=Math.floor(s/3600); s-=h*3600; const m=Math.floor(s/60); const ss=Math.floor(s-m*60);
+  return (h?h+'ชม ':'')+(m?m+'น ':'')+ss+'ว';
+}
+
+let logEl = null, logStick = true;
+
+async function tick(){
+  let st;
+  try{ st = await (await fetch('/api/state',{cache:'no-store'})).json(); }
+  catch(e){ $('c_server').innerHTML = '<span class="dot off"></span> monitor error'; return; }
+
+  $('c_clock').textContent = new Date().toLocaleTimeString('th-TH');
+
+  // ---- worker เครื่องนี้ ----
+  const hb = st.local_worker;
+  const wban = $('ban_worker');
+  if(!hb){
+    setState('offline','ไม่พบ heartbeat — worker ไม่ได้รัน?');
+    $('c_worker').innerHTML = '<span class="dot off"></span> worker หยุด';
+    wban.className='banner crit show'; wban.textContent='⚠ worker บนเครื่องนี้ไม่ทำงาน (ไม่มี heartbeat) — ตรวจ run_worker.bat / Startup';
+  } else if(!hb.alive){
+    setState('offline', 'heartbeat ค้าง '+hb.age_sec+' วิ');
+    $('c_worker').innerHTML = '<span class="dot off"></span> worker ค้าง';
+    wban.className='banner crit show'; wban.textContent='⚠ worker ไม่ส่ง heartbeat มา '+hb.age_sec+' วินาที — อาจค้างหรือหยุด';
+  } else {
+    const s = hb.state||'idle';
+    setState(s, s==='busy' && hb.job ? ('งาน '+esc(hb.job.id)) : (s==='idle'?'รอรับงาน':esc(s)));
+    $('c_worker').innerHTML = '<span class="dot on"></span> '+esc(hb.worker_id||'worker');
+    wban.className='banner';
+  }
+  $('k_uptime').textContent = hb ? ('uptime '+dur(hb.started_at)+' · PID '+esc(hb.pid??'?')) : '—';
+  $('k_done').textContent = hb ? hb.done : '–';
+  $('k_failed').textContent = hb ? hb.failed : '–';
+
+  // ---- server / queue ----
+  const sv = st.server||{};
+  const sban = $('ban_server');
+  if(!sv.ok){
+    $('c_server').innerHTML = '<span class="dot warn"></span> server ?';
+    sban.className='banner warn show'; sban.textContent='⚠ '+esc(sv.error||'ติดต่อ server ไม่ได้')+' — แสดงเฉพาะสถานะ local';
+    $('f_server').textContent='';
+    renderQueue([]); renderWorkers([]); renderRun(null);
+    $('f_update').textContent='อัปเดตล่าสุด: '+new Date().toLocaleTimeString('th-TH');
+    return;
+  }
+  $('c_server').innerHTML = '<span class="dot on"></span> server ออนไลน์';
+  sban.className='banner';
+  $('f_server').textContent = sv.server_url||'';
+
+  const workers = sv.workers||[];
+  const online = workers.filter(w => Date.now()-Date.parse(w.last_seen) < 90000);
+  $('k_wonline').textContent = online.length;
+  $('k_wtotal').textContent = 'ทั้งหมด '+workers.length+' เครื่อง';
+  const c = sv.counts||{};
+  $('k_pending').textContent = c.pending||0;
+  $('k_running').textContent = (c.running||0)+' กำลังรัน · '+(c.done||0)+' เสร็จ';
+
+  renderQueue(sv.jobs||[]);
+  renderWorkers(workers);
+  renderRun(sv.running);
+  $('f_update').textContent = 'อัปเดตล่าสุด: '+new Date().toLocaleTimeString('th-TH');
+}
+
+function setState(s, sub){
+  const el=$('k_state'); const cls={busy:'busy',idle:'idle',offline:'offline',starting:'starting'}[s]||'starting';
+  el.className='badge '+cls; el.textContent=({busy:'BUSY',idle:'IDLE',offline:'OFFLINE',starting:'STARTING'}[s]||s.toUpperCase());
+  $('k_uptime').dataset.sub = sub||'';
+}
+
+function renderQueue(jobs){
+  $('q_count').textContent = jobs.length;
+  $('q_empty').style.display = jobs.length? 'none':'block';
+  $('q_body').innerHTML = jobs.map(j=>`<tr class="${j.status==='running'?'isrun':''}">
+    <td class="id">${esc(j.id)}</td><td class="mono">${esc(j.type)}</td>
+    <td><span class="st ${esc(j.status)}">${esc(j.status)}</span></td>
+    <td class="mono">${esc(j.worker_id||'-')}</td>
+    <td class="mono">${esc((j.created_at||'').replace('T',' ').replace('Z',''))}</td></tr>`).join('');
+}
+
+function renderWorkers(workers){
+  $('w_count').textContent = workers.length;
+  if(!workers.length){ $('w_body').innerHTML='<div class="empty">ยังไม่มี worker ลงทะเบียน</div>'; return; }
+  $('w_body').innerHTML = workers.map(w=>{
+    const on = Date.now()-Date.parse(w.last_seen) < 90000;
+    const m = w.machine||{};
+    return `<div class="wk"><span class="dot ${on?'on':'off'}"></span>
+      <span><span class="nm">${esc(w.worker_id)}</span><br>
+      <span class="meta">${esc(m.platform||'')} · ${esc(m.cpu_count||'?')} คอร์ · ${esc((w.models||[]).length)} โมเดล</span></span>
+      <span class="spacer"></span>
+      <span class="meta">${on?'🟢 '+ago(w.last_seen)+' ที่แล้ว':'🔴 '+ago(w.last_seen)+' ที่แล้ว'}</span></div>`;
+  }).join('');
+}
+
+function renderRun(r){
+  const area=$('run_area');
+  if(!r){ area.innerHTML='<div class="empty">ว่าง — worker รอรับงาน</div>'; logEl=null; return; }
+  const p=r.params||{};
+  const pm = Object.entries(p).map(([k,v])=>k+'='+v).join(' · ');
+  const prevId = area.dataset.job;
+  if(prevId!==r.id){                 // งานใหม่ → สร้าง DOM ใหม่ทีเดียว
+    area.dataset.job=r.id;
+    area.innerHTML = `<div class="run-head">
+        <span class="dot on" style="color:var(--run);background:var(--run)"></span>
+        <span class="jid">${esc(r.id)}</span>
+        <span class="st running">${esc(r.type)}</span>
+        <span class="el" id="run_el"></span><span class="spacer" style="flex:1"></span>
+        <span class="pm">${esc(pm)}</span></div>
+      <pre id="run_log"></pre>`;
+    logEl=$('run_log');
+  }
+  $('run_el').textContent = '⏱ '+dur(r.claimed_at);
+  if(logEl){
+    const atBottom = logEl.scrollHeight-logEl.scrollTop-logEl.clientHeight < 40;
+    const txt = r.log_tail||'(กำลังเริ่ม…)';
+    if(logEl.textContent!==txt){ logEl.textContent=txt; if(atBottom) logEl.scrollTop=logEl.scrollHeight; }
+  }
+}
+
+tick(); setInterval(tick, 2000);
+</script></body></html>
