@@ -23,7 +23,13 @@ class SimConfig:
 
     # --- Statistics ---
     photons: int = 1_000_000              # number of primary photons (events)
-    threads: int = 1                      # Geant4 threads
+    threads: int = 1                      # Geant4 threads (Windows: forced to 1 — MT unsupported)
+
+    # --- Parallelism (Windows has no Geant4 MT, so we shard across processes) ---
+    mode: str = "single"                  # "single" | "balanced" | "max" — resolved to n_procs
+    n_procs: int = 1                      # explicit process count (overrides mode when > 1)
+    ram_per_proc_mb: int = 1500           # RAM budget per shard (~800MB measured + headroom); caps n_procs
+    random_seed: int = 1234567            # base seed; shard k uses random_seed + k
 
     # --- Geometry (AP projection along +z) ---
     sod: float = 800.0                    # source-to-object distance (mm); source at z=-sod
@@ -91,3 +97,46 @@ class SimConfig:
     @classmethod
     def from_json(cls, path: str | Path) -> "SimConfig":
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
+
+
+def available_ram_mb() -> float:
+    """Physical RAM available now (MB), cross-platform, no hard deps."""
+    try:
+        import ctypes
+
+        class _MS(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+        st = _MS()
+        st.dwLength = ctypes.sizeof(_MS)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):  # type: ignore[attr-defined]
+            return st.ullAvailPhys / (1024 * 1024)
+    except Exception:
+        pass
+    try:  # POSIX
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) / 1024
+    except Exception:
+        pass
+    return 4096.0  # unknown → assume a modest 4 GB
+
+
+def resolve_n_procs(cfg: "SimConfig", cpu: int | None = None,
+                    avail_mb: float | None = None) -> int:
+    """Turn (mode / n_procs) + live RAM into a safe concrete process count."""
+    import os as _os
+    cpu = cpu or _os.cpu_count() or 1
+    avail_mb = available_ram_mb() if avail_mb is None else avail_mb
+
+    if int(cfg.n_procs) > 1:
+        want = int(cfg.n_procs)
+    else:
+        want = {"single": 1, "balanced": max(1, cpu - 2), "max": cpu}.get(cfg.mode, 1)
+
+    ram_cap = max(1, int(avail_mb * 0.85 / max(256, int(cfg.ram_per_proc_mb))))
+    return max(1, min(want, cpu, ram_cap))

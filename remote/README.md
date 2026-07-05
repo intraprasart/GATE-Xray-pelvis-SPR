@@ -33,9 +33,24 @@
 
 | type | params หลัก | ทำอะไร |
 |---|---|---|
-| `run` | `stl`, `photons`, `energy_keV`, `pix`, `threads`, … | รัน simulation โมเดลเดียว (flat + object + SPR) |
+| `run` | `stl`, `photons`, `energy_keV`, `pix`, `mode`/`n_procs`, … | รัน simulation โมเดลเดียว (flat + object + SPR) |
 | `run_pair` | `control_stl`, `fracture_stl` + ค่าเดียวกับ run | รัน control + fracture แล้ว compare อัตโนมัติ → dSPR / local-STD / entropy |
 | `compare` | `control_job`, `fracture_job` | เปรียบเทียบผลของ job เก่า 2 ตัวที่ยังอยู่บนเครื่อง worker |
+
+### โหมดการรัน — ใช้ CPU/RAM เต็มเครื่อง
+
+opengate **ไม่รองรับ multithread บน Windows** จึงใช้วิธี **แตกงานเป็นหลายโปรเซส** (sharding):
+แต่ละโปรเซสยิง photon ส่วนหนึ่งด้วย seed ต่างกัน แล้วรวมผล (fluence บวกกัน,
+primary/scatter counts บวกกัน) — เทียบเท่าการรันยาวครั้งเดียวแต่เร็วขึ้นตามจำนวนคอร์
+
+| `mode` | จำนวนโปรเซส | เหมาะกับ |
+|---|---|---|
+| `single` | 1 | งานเล็ก / ใช้เครื่องทำอย่างอื่นไปด้วย |
+| `balanced` | คอร์ − 2 | ค่าเริ่มต้น — เร็วแต่ยังเหลือคอร์ให้ระบบ |
+| `max` | ทุกคอร์ | เร็วที่สุด ใช้เครื่องเต็มที่ |
+
+จำนวนโปรเซสถูก **cap ตาม RAM ว่างอัตโนมัติ** (≈ RAM×0.85 ÷ 2GB ต่อโปรเซส) กัน OOM
+หรือระบุ `n_procs` เป็นตัวเลขตรง ๆ ก็ได้ (จะ override `mode`)
 
 พารามิเตอร์ตัวเลขทั้งหมดถูก clamp อยู่ในช่วงปลอดภัยฝั่ง worker และชื่อ STL
 ต้องเป็นไฟล์ใน `models/` เท่านั้น (กัน path traversal / คำสั่งแปลกปลอม)

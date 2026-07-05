@@ -76,11 +76,8 @@ def _read_energy_keV(tree, energy0_keV: float) -> np.ndarray:
     return E
 
 
-def compute(phsp_root: str | Path, out_dir: str | Path, cfg: SimConfig,
-            write: bool = True) -> PrimaryScatterResult:
-    """Build I_primary, I_scatter and SPR images from one phase-space file."""
-    phsp_root = Path(phsp_root)
-    out_dir = Path(out_dir)
+def _counts_from_root(phsp_root: Path, cfg: SimConfig) -> tuple[np.ndarray, np.ndarray]:
+    """Bin one phase-space file into (I_primary, I_scatter) count images."""
     pix = int(cfg.pix)
     film_xy = float(cfg.film_xy)
     film_z = float(cfg.odd)
@@ -137,12 +134,22 @@ def compute(phsp_root: str | Path, out_dir: str | Path, cfg: SimConfig,
 
     I_primary = _accumulate(primary_mask)
     I_scatter = _accumulate(~primary_mask)
+    return I_primary, I_scatter
+
+
+def _finalize(I_primary: np.ndarray, I_scatter: np.ndarray,
+              out_dir: Path, cfg: SimConfig, write: bool) -> PrimaryScatterResult:
+    pix = int(cfg.pix)
+    pix_size = float(cfg.film_xy) / pix
     # SPR is undefined where no primary photons reached the pixel. Those zeros are
     # almost all low-statistics / off-field artefacts; dividing by a tiny epsilon
     # there produces ~1e12 spikes that swamp the analysis. Set SPR = 0 instead.
     SPR = np.divide(I_scatter, I_primary,
                     out=np.zeros((pix, pix), dtype=np.float64),
                     where=(I_primary > 0))
+    tot = float(I_primary.sum() + I_scatter.sum())
+    primary_fraction = float(I_primary.sum() / tot) if tot > 0 else 0.0
+    print(f"[phsp] Primary-like fraction (in-field): {primary_fraction:.6f}")
 
     if write:
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -156,3 +163,32 @@ def compute(phsp_root: str | Path, out_dir: str | Path, cfg: SimConfig,
             imaging.save_png(SPR, out_dir / "SPR.png", "SPR = scatter/primary")
 
     return PrimaryScatterResult(I_primary, I_scatter, SPR, primary_fraction)
+
+
+def compute(phsp_root: str | Path, out_dir: str | Path, cfg: SimConfig,
+            write: bool = True) -> PrimaryScatterResult:
+    """Build I_primary, I_scatter and SPR images from one phase-space file."""
+    I_primary, I_scatter = _counts_from_root(Path(phsp_root), cfg)
+    return _finalize(I_primary, I_scatter, Path(out_dir), cfg, write)
+
+
+def compute_multi(phsp_roots, out_dir: str | Path, cfg: SimConfig,
+                  write: bool = True) -> PrimaryScatterResult:
+    """Same as compute() but sums counts across several shard phase-space files.
+
+    Independent Monte-Carlo shards are additive, so summing primary/scatter
+    counts is exactly equivalent to one long run with the combined statistics.
+    """
+    paths = [Path(p) for p in phsp_roots]
+    if not paths:
+        raise FileNotFoundError("no phase-space files to combine")
+    if len(paths) == 1:
+        return compute(paths[0], out_dir, cfg, write)
+    pix = int(cfg.pix)
+    I_primary = np.zeros((pix, pix), dtype=np.float64)
+    I_scatter = np.zeros((pix, pix), dtype=np.float64)
+    for p in paths:
+        a, b = _counts_from_root(p, cfg)
+        I_primary += a
+        I_scatter += b
+    return _finalize(I_primary, I_scatter, Path(out_dir), cfg, write)

@@ -218,6 +218,16 @@ def cli_args(params: dict, stl: Path, out_dir: Path, allow_no_phsp: bool = True)
     for key, (lo, hi) in FLOAT_PARAMS.items():
         if key in params:
             args += [f"--{key}", str(max(lo, min(hi, float(params[key]))))]
+    # โหมดการรัน (ใช้ CPU/RAM เต็มเครื่อง): single | balanced | max
+    # หรือระบุจำนวนโปรเซสตรง ๆ ด้วย n_procs (pipeline จะ cap ตาม RAM ให้อีกที)
+    if params.get("mode") in ("single", "balanced", "max"):
+        args += ["--mode", params["mode"]]
+    if "n_procs" in params:
+        try:
+            np_ = int(params["n_procs"])
+        except (TypeError, ValueError):
+            np_ = 1
+        args += ["--n_procs", str(max(1, min(np_, os.cpu_count() or 1)))]
     # no_phsp ตัด phase-space ทิ้ง → ไม่มี SPR.mhd; ใช้ได้เฉพาะ run เดี่ยวเท่านั้น
     # (run_pair ต้องมี SPR.mhd ไปทำ compare)
     if allow_no_phsp and params.get("no_phsp"):

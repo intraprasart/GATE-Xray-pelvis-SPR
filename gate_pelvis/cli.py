@@ -8,7 +8,17 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import fields
+
+# Windows consoles default to a legacy codepage (e.g. cp874) that cannot encode
+# the Thai progress messages; force UTF-8 so direct CLI runs never crash on print.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 from .config import SimConfig
 from .pipeline import run_simulation
@@ -20,8 +30,11 @@ def _add_config_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--stl", required=True, help="Path to STL mesh (mm)")
     p.add_argument("--out", default="poc_radiograph_out", help="Output directory")
     p.add_argument("--clean", action="store_true", help="Delete output dir first")
-    for name in ("photons", "threads", "pix"):
+    for name in ("photons", "threads", "pix", "n_procs"):
         p.add_argument(f"--{name}", type=int, default=getattr(defaults, name))
+    p.add_argument("--mode", choices=("single", "balanced", "max"), default=defaults.mode,
+                   help="parallelism: single=1 proc, balanced=cpu-2, max=all cpu "
+                        "(RAM-capped; --n_procs overrides)")
     for name in ("sod", "odd", "film_xy", "film_thickness", "energy_keV",
                  "rot_x", "rot_y", "rot_z", "primary_theta_deg", "primary_dE_keV"):
         p.add_argument(f"--{name}", type=float, default=getattr(defaults, name))

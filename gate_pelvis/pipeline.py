@@ -17,7 +17,7 @@ from typing import Callable
 
 import numpy as np
 
-from .config import SimConfig
+from .config import SimConfig, resolve_n_procs
 from . import imaging, phasespace
 
 # Root that must be importable as a package for `python -m gate_pelvis._worker`.
@@ -40,23 +40,77 @@ def _log(progress: ProgressFn | None, msg: str) -> None:
         print(msg)
 
 
-def _run_worker(config_path: Path, phase: str, progress: ProgressFn | None) -> None:
-    """Run one GATE phase in a subprocess, streaming its stdout."""
+def _worker_env() -> dict:
     env = dict(os.environ)
     env["PYTHONPATH"] = _PKG_PARENT + os.pathsep + env.get("PYTHONPATH", "")
-    cmd = [sys.executable, "-u", "-m", "gate_pelvis._worker", str(config_path), phase]
-    _log(progress, f"$ {' '.join(cmd)}")
-    proc = subprocess.Popen(
-        cmd, cwd=_PKG_PARENT, env=env,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, bufsize=1,
-    )
-    assert proc.stdout is not None
-    for line in proc.stdout:
-        _log(progress, line.rstrip("\n"))
-    code = proc.wait()
-    if code != 0:
-        raise RuntimeError(f"GATE phase '{phase}' failed (exit code {code}). See log above.")
+    return env
+
+
+def _spawn(config_path: Path, phase: str, extra: list[str], stdout):
+    cmd = [sys.executable, "-u", "-m", "gate_pelvis._worker", str(config_path), phase, *extra]
+    return subprocess.Popen(cmd, cwd=_PKG_PARENT, env=_worker_env(),
+                            stdout=stdout, stderr=subprocess.STDOUT, text=True, bufsize=1)
+
+
+def _run_phase(cfg: SimConfig, config_path: Path, phase: str,
+               n_procs: int, progress: ProgressFn | None) -> None:
+    """Run one phase — either a single streamed process or N parallel shards."""
+    phase_dir = cfg.out_path / phase
+    phase_dir.mkdir(parents=True, exist_ok=True)
+
+    if n_procs <= 1:
+        proc = _spawn(config_path, phase, [], subprocess.PIPE)
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            _log(progress, line.rstrip("\n"))
+        if proc.wait() != 0:
+            raise RuntimeError(f"GATE phase '{phase}' failed. See log above.")
+        return
+
+    _log(progress, f"[{phase}] เริ่ม {n_procs} shard ขนาน ...")
+    procs = []
+    for k in range(n_procs):
+        sdir = phase_dir / f"shard_{k}"
+        sdir.mkdir(parents=True, exist_ok=True)
+        logf = (sdir / "log.txt").open("w", encoding="utf-8", errors="replace")
+        p = _spawn(config_path, phase, [str(k), str(n_procs), str(sdir)], logf)
+        procs.append((k, p, logf, sdir))
+
+    fails = []
+    for k, p, logf, sdir in procs:
+        code = p.wait()
+        logf.close()
+        _log(progress, f"[{phase}] shard {k + 1}/{n_procs} จบ (exit {code})")
+        if code != 0:
+            fails.append((k, sdir))
+    if fails:
+        k, sdir = fails[0]
+        tail = "\n".join((sdir / "log.txt").read_text(encoding="utf-8", errors="replace")
+                         .splitlines()[-25:])
+        raise RuntimeError(f"[{phase}] {len(fails)}/{n_procs} shard ล้มเหลว. "
+                           f"ท้าย log ของ shard {k}:\n{tail}")
+
+    _merge_fluence([sdir for _, _, _, sdir in procs], phase_dir, cfg, progress)
+
+
+def _merge_fluence(shard_dirs, phase_dir: Path, cfg: SimConfig,
+                   progress: ProgressFn | None) -> None:
+    """Sum shard fluence images into the phase's combined I.mhd."""
+    total = None
+    for d in shard_dirs:
+        _, arr = imaging.read_mhd(d / "I.mhd")
+        total = arr.astype(np.float64) if total is None else total + arr
+    ref = imaging.make_reference_image(int(cfg.pix), cfg.pixel_size_mm)
+    imaging.write_mhd_like(ref, total, phase_dir / "I.mhd")
+    _log(progress, f"[{phase_dir.name}] รวม fluence จาก {len(shard_dirs)} shard → I.mhd")
+
+
+def _phsp_paths(phase_dir: Path) -> list[Path]:
+    """Phase-space file(s) for a phase: single run, or every shard."""
+    single = phase_dir / "phsp.root"
+    if single.exists():
+        return [single]
+    return sorted(phase_dir.glob("shard_*/phsp.root"))
 
 
 def run_simulation(cfg: SimConfig, progress: ProgressFn | None = None,
@@ -72,11 +126,18 @@ def run_simulation(cfg: SimConfig, progress: ProgressFn | None = None,
 
     config_path = cfg.to_json(out / "config.json")
 
+    n_procs = resolve_n_procs(cfg)
+    if n_procs > 1:
+        _log(progress, f"โหมดขนาน: {n_procs} โปรเซส "
+                       f"(mode={cfg.mode}, cpu={os.cpu_count()}, photons/shard≈{cfg.photons // n_procs})")
+    else:
+        _log(progress, "โหมดเดี่ยว: 1 โปรเซส")
+
     _log(progress, "[1/3] flat field (no object) ...")
-    _run_worker(config_path, "flat", progress)
+    _run_phase(cfg, config_path, "flat", n_procs, progress)
 
     _log(progress, "[2/3] object (with STL) ...")
-    _run_worker(config_path, "object", progress)
+    _run_phase(cfg, config_path, "object", n_procs, progress)
 
     _log(progress, "[3/3] post-processing ...")
     return postprocess(cfg, progress)
@@ -126,15 +187,15 @@ def postprocess(cfg: SimConfig, progress: ProgressFn | None = None) -> RunResult
 def _postprocess_primary_scatter(cfg, ref_img, eps, result: RunResult,
                                  progress: ProgressFn | None) -> None:
     out = cfg.out_path
-    ph_flat = out / "flat" / "phsp.root"
-    ph_obj = out / "object" / "phsp.root"
-    if not ph_flat.exists() or not ph_obj.exists():
+    flat_paths = _phsp_paths(out / "flat")
+    obj_paths = _phsp_paths(out / "object")
+    if not flat_paths or not obj_paths:
         raise FileNotFoundError("Missing phsp.root; re-run with write_phsp enabled.")
 
-    _log(progress, "  separating primary / scatter (flat) ...")
-    flat = phasespace.compute(ph_flat, out / "flat", cfg, write=True)
-    _log(progress, "  separating primary / scatter (object) ...")
-    obj = phasespace.compute(ph_obj, out / "object", cfg, write=True)
+    _log(progress, f"  separating primary / scatter (flat, {len(flat_paths)} file) ...")
+    flat = phasespace.compute_multi(flat_paths, out / "flat", cfg, write=True)
+    _log(progress, f"  separating primary / scatter (object, {len(obj_paths)} file) ...")
+    obj = phasespace.compute_multi(obj_paths, out / "object", cfg, write=True)
     result.primary_fraction = obj.primary_fraction
 
     Tp = (obj.I_primary + eps) / (flat.I_primary + eps)

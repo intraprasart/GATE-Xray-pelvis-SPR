@@ -470,7 +470,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <div><label>Photons</label><input id="photons" type="number" value="1000000"></div>
       <div><label>Energy (keV)</label><input id="energy" type="number" value="80"></div>
       <div><label>Pixels</label><input id="pix" type="number" value="512"></div>
-      <div><label>Threads</label><input id="threads" type="number" value="1"></div>
+      <div><label>โหมดการรัน (CPU)</label>
+        <select id="mode">
+          <option value="single">single — 1 คอร์ (เบาที่สุด)</option>
+          <option value="balanced" selected>balanced — เว้น 2 คอร์ให้เครื่อง</option>
+          <option value="max">max — ใช้ CPU/RAM เต็มเครื่อง</option>
+        </select></div>
     </div>
     <p><button onclick="submitJob()">🚀 ส่งงาน</button> <span id="submitmsg"></span></p>
   </div>
@@ -548,7 +553,7 @@ async function submitJob() {
     photons: +document.getElementById('photons').value,
     energy_keV: +document.getElementById('energy').value,
     pix: +document.getElementById('pix').value,
-    threads: +document.getElementById('threads').value,
+    mode: document.getElementById('mode').value,
   };
   if (t === 'run_pair') {
     p.control_stl = document.getElementById('control_stl').value;

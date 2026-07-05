@@ -30,8 +30,13 @@ def _center_translation_from_stl(stl_path: Path):
     return (-float(c[0]), -float(c[1]), -float(c[2]))
 
 
-def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool):
-    """Construct (but do not run) a GATE Simulation for one phase."""
+def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool,
+                     photons: int | None = None, seed: int | None = None):
+    """Construct (but do not run) a GATE Simulation for one phase.
+
+    photons/seed override cfg when running a shard (process-level parallelism).
+    """
+    import os
     import opengate as gate
 
     mm = gate.g4_units.mm
@@ -42,7 +47,11 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool):
     sim = gate.Simulation()
     sim.output_dir = str(out_dir)
     sim.visu = False
-    sim.number_of_threads = int(cfg.threads)
+    # Geant4 multithreading is unavailable on Windows; parallelism comes from
+    # running multiple shard PROCESSES instead. Keep each engine single-threaded.
+    sim.number_of_threads = 1 if os.name == "nt" else int(cfg.threads)
+    if seed is not None:
+        sim.random_seed = int(seed)
 
     # World
     sim.world.size = [2.0 * m, 2.0 * m, 2.0 * m]
@@ -82,7 +91,7 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool):
     # Point source aimed at the film, mono-energetic
     src = sim.add_source("GenericSource", "src")
     src.particle = "gamma"
-    src.n = int(cfg.photons)
+    src.n = int(cfg.photons if photons is None else photons)
     src.position.type = "point"
     src.position.translation = [0.0, 0.0, -float(cfg.sod) * mm]
 
@@ -123,16 +132,34 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool):
     return sim
 
 
-def run_phase(cfg: SimConfig, phase: str) -> Path:
-    """Build and run one phase ('flat' or 'object'). Returns its output dir."""
+def _split_photons(total: int, n_shards: int, shard: int) -> int:
+    """Distribute `total` photons across shards as evenly as possible."""
+    base, extra = divmod(int(total), int(n_shards))
+    return base + (1 if shard < extra else 0)
+
+
+def run_phase(cfg: SimConfig, phase: str, shard: int = 0, n_shards: int = 1,
+              out_dir: Path | None = None) -> Path:
+    """Build and run one phase ('flat' or 'object'), optionally as one shard.
+
+    When n_shards > 1 the caller runs several of these as separate processes,
+    each with a slice of the photons and a distinct seed, then merges the output.
+    """
     if phase not in ("flat", "object"):
         raise ValueError(f"phase must be 'flat' or 'object', got {phase!r}")
-    out_dir = cfg.out_path / phase
+    if out_dir is None:
+        out_dir = cfg.out_path / phase
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    sim = build_simulation(cfg, out_dir, with_object=(phase == "object"))
-    print(f"\n=== Running phase: {phase} ===")
+
+    photons = _split_photons(cfg.photons, n_shards, shard) if n_shards > 1 else int(cfg.photons)
+    seed = int(cfg.random_seed) + int(shard)
+    sim = build_simulation(cfg, out_dir, with_object=(phase == "object"),
+                           photons=photons, seed=seed)
+    tag = f"{phase}" if n_shards == 1 else f"{phase} shard {shard + 1}/{n_shards}"
+    print(f"\n=== Running {tag} ({photons} photons, seed {seed}) ===")
     sim.run()
-    print(f"=== Done phase: {phase} ===\n")
+    print(f"=== Done {tag} ===\n")
     return out_dir
 
 
