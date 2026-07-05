@@ -123,7 +123,7 @@ MAX_RESULT_FILE_BYTES = 300 * 1024 * 1024
 # ขอบเขตพารามิเตอร์ที่ยอมรับจาก server (กันค่าที่พังเครื่อง)
 INT_PARAMS = {"photons": (1, MAX_PHOTONS), "pix": (16, 2048),
               "threads": (1, os.cpu_count() or 1)}
-FLOAT_PARAMS = {"energy_keV": (1.0, 1000.0), "sod": (10.0, 5000.0),
+FLOAT_PARAMS = {"energy_keV": (1.0, 1000.0), "sod": (50.0, 5000.0),
                 "odd": (50.0, 2000.0), "film_xy": (10.0, 2000.0),
                 "film_thickness": (0.1, 100.0),
                 "rot_x": (-360.0, 360.0), "rot_y": (-360.0, 360.0),
@@ -327,6 +327,12 @@ def resolve_job_subdir(job_name: str, sub_name: str) -> Path:
 
 
 def cli_args(params: dict, stl: Path, out_dir: Path, allow_no_phsp: bool = True) -> list[str]:
+    # ตรวจตำแหน่ง source แต่เนิ่น ๆ: engine ต้องการ |source| >= 50 mm (กัน job ตายกลาง build)
+    if any(k in params for k in ("src_x", "src_y", "src_z")):
+        import math
+        n = math.hypot(*(float(params.get(k, 0) or 0) for k in ("src_x", "src_y", "src_z")))
+        if n < 50.0:
+            raise ValueError(f"ตำแหน่ง source ใกล้วัตถุเกินไป (|src|={n:.0f} mm < 50 mm)")
     args = [PYTHON, "-u", "-m", "gate_pelvis.cli", "run",
             "--stl", str(stl), "--out", str(out_dir), "--clean"]
     for key, (lo, hi) in INT_PARAMS.items():

@@ -297,7 +297,8 @@ def list_models():
 # ----------------------------------------------------------------------
 
 def _safe_mesh_name(name: str) -> str:
-    if not name or any(c in name for c in "/\\") or ".." in name or not name.endswith(".stl"):
+    if (not name or "\x00" in name or any(c in name for c in "/\\")
+            or ".." in name or not name.lower().endswith(".stl")):
         raise HTTPException(400, "ชื่อโมเดลไม่ถูกต้อง")
     return name
 
@@ -308,7 +309,8 @@ def mesh_manifest():
     out = {}
     for p in MESH_DIR.glob("*.json"):
         try:
-            out[p.stem + ".stl"] = json.loads(p.read_text(encoding="utf-8")).get("hash")
+            rec = json.loads(p.read_text(encoding="utf-8"))
+            out[rec.get("name") or (p.stem + ".stl")] = rec.get("hash")  # ใช้ชื่อจริง → worker match ตรง
         except (OSError, ValueError):
             continue
     return out
@@ -338,7 +340,10 @@ def get_mesh(name: str):
     p = MESH_DIR / (_safe_mesh_name(name)[:-4] + ".json")
     if not p.exists():
         raise HTTPException(404, "ยังไม่มี preview ของโมเดลนี้ (รอ worker อัปโหลด)")
-    return json.loads(p.read_text(encoding="utf-8"))
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise HTTPException(500, "ไฟล์ preview เสียหาย")
 
 
 @app.post("/api/worker/register", dependencies=[Depends(require_worker)])
@@ -688,7 +693,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <figure style="margin:0"><canvas id="pv_plan" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
         <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">Plan — มองจากด้านบน (X↔, Z↕)</figcaption></figure>
       <figure style="margin:0"><canvas id="pv_front" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
-        <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">Front — มองตามแนวลำแสง (X↔, Y↕)</figcaption></figure>
+        <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">Front — ระนาบหน้า X-Y (โลก)</figcaption></figure>
       <figure style="margin:0"><canvas id="pv_side" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
         <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">Side — มองจากด้านข้าง (Z↔, Y↕)</figcaption></figure>
       <figure style="margin:0"><canvas id="pv_iso" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
@@ -933,11 +938,12 @@ function pvScene() {
   const Dc = V3.mul(u, v.odd);                       // ศูนย์กลางฉากรับ (หลังวัตถุ)
   let up = Math.abs(u[1]) > 0.99 ? [1,0,0] : [0,1,0];
   const a = V3.norm(V3.cross(u, up)), b = V3.cross(u, a);   // แกนในระนาบฉากรับ
-  const hf = v.field > 0 ? v.field/2 : FILM_MM*Math.SQRT2/2;
+  // จำกัดลำแสงไม่ให้เกินเส้นทแยงฟิล์ม — ตรงกับ engine (min(field/2, half-diagonal))
+  const hf = Math.min(v.field > 0 ? v.field/2 : FILM_MM*Math.SQRT2/2, FILM_MM*Math.SQRT2/2);
   const cor = (r, sa, sb) => V3.add(Dc, V3.add(V3.mul(a, sa*r), V3.mul(b, sb*r)));
   const det = [cor(FILM_MM/2,1,1), cor(FILM_MM/2,1,-1), cor(FILM_MM/2,-1,-1), cor(FILM_MM/2,-1,1)];
   const fld = [cor(hf,1,1), cor(hf,1,-1), cor(hf,-1,-1), cor(hf,-1,1)];
-  return { S, Dc, det, fld, sod, sid: sod + v.odd, v };
+  return { S, Dc, det, fld, sod, sid: sod + v.odd, hf, v };
 }
 
 function pvView(cid, projKey) {
@@ -979,14 +985,21 @@ function pvDraw(msg) {
   if (msg !== undefined) pvMsg = msg;
   pvView('pv_plan','plan'); pvView('pv_front','front'); pvView('pv_side','side'); pvView('pv_iso','iso');
   const sc = pvScene();
-  const ang = Math.atan((sc.v.field>0? sc.v.field/2 : FILM_MM*Math.SQRT2/2)/sc.sid)*180/Math.PI;
+  const ang = Math.atan(sc.hf/sc.sid)*180/Math.PI;
+  const clamped = sc.v.field > 0 && sc.v.field/2 > FILM_MM*Math.SQRT2/2;
   document.getElementById('pv_info').textContent =
     `SOD ${sc.sod.toFixed(0)} มม. · SID ${sc.sid.toFixed(0)} มม. · ครึ่งมุมลำแสง ${ang.toFixed(1)}° · `
-    + `ลำแสง ${sc.v.field>0? sc.v.field+' มม.' : 'เต็มฟิล์ม'}` + (pvMsg? '  — '+pvMsg : '');
+    + `ลำแสง ${sc.v.field>0? sc.v.field+' มม.'+(clamped?' (เกินฟิล์ม→ตัดที่ขอบ)':'') : 'เต็มฟิล์ม'}`
+    + (pvMsg? '  — '+pvMsg : '');
 }
 function pvInit() {
   PV_IDS.forEach(id => document.getElementById(id).addEventListener('input', () => pvDraw('')));
   document.getElementById('pv_model').addEventListener('change', e => pvLoadMesh(e.target.value));
+  // ให้ Preview ตามโมเดลที่จะส่งงานจริง (control_stl) โดยอัตโนมัติ — กันดู preview ผิดตัว
+  document.getElementById('control_stl').addEventListener('change', e => {
+    const s = document.getElementById('pv_model');
+    if ([...s.options].some(o => o.value === e.target.value)) { s.value = e.target.value; pvLoadMesh(e.target.value); }
+  });
   pvDraw('');
 }
 

@@ -72,6 +72,10 @@ def main(argv=None) -> int:
     a = parser.parse_args(argv)
 
     if a.cmd == "run":
+        srcs = [a.src_x, a.src_y, a.src_z]
+        if any(s is not None for s in srcs) and any(s is None for s in srcs):
+            parser.error("ต้องระบุ --src_x --src_y --src_z ครบทั้งสามค่าพร้อมกัน "
+                         "(ไม่งั้นจะย้อนไปใช้ตำแหน่ง default เงียบ ๆ)")
         cfg = _cfg_from_args(a)
         run_simulation(cfg, clean=a.clean)
     elif a.cmd == "compare":
