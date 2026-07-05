@@ -91,7 +91,12 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool):
     src.direction.type = "iso"
     src.direction.phi = [0 * deg, 360 * deg]
     src.direction.theta = [(180.0 - alpha) * deg, 180.0 * deg]
-    src.direction.angle_acceptance_volume = "film"
+    # opengate >= 10.1 renamed angle_acceptance_volume -> angular_acceptance
+    if hasattr(src.direction, "angular_acceptance"):
+        src.direction.angular_acceptance.target_volumes = ["film"]
+        src.direction.angular_acceptance.enable_intersection_check = True
+    else:
+        src.direction.angle_acceptance_volume = "film"
     src.energy.type = "mono"
     src.energy.mono = float(cfg.energy_keV) * keV
 

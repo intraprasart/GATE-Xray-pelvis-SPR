@@ -1,0 +1,13 @@
+services:
+  spr-jobserver:
+    build: .
+    container_name: spr-jobserver
+    restart: unless-stopped
+    ports:
+      - "8642:8642"
+    environment:
+      SPR_ADMIN_KEY: ${SPR_ADMIN_KEY:?ตั้งค่าใน .env}
+      SPR_WORKER_KEY: ${SPR_WORKER_KEY:?ตั้งค่าใน .env}
+      SPR_DATA_DIR: /data
+    volumes:
+      - ./data:/data

@@ -1,0 +1,13 @@
+{
+  "server_url": "http://YOUR-SERVER:8642",
+  "worker_key": "CHANGE-ME",
+  "worker_id": "",
+  "repo_dir": "D:/GATE-Xray-pelvis-SPR",
+  "python": "D:/GATE-Xray-pelvis-SPR/.venv/Scripts/python.exe",
+  "jobs_dir": "D:/GATE-Xray-pelvis-SPR/runs/remote_jobs",
+  "models_dir": "D:/GATE-Xray-pelvis-SPR/models",
+  "poll_seconds": 10,
+  "max_photons": 100000000,
+  "max_job_seconds": 86400,
+  "keep_local_runs": true
+}
