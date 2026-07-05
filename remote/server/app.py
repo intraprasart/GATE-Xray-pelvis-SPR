@@ -39,8 +39,11 @@ MAX_EXTRACT_BYTES = 6_000_000_000  # ขนาดรวมหลังคลา�
 MAX_PENDING_JOBS = 200             # กันคิวถูกถล่ม
 TIMESTAMP_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
+MESH_DIR = DATA_DIR / "meshes"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 (DATA_DIR / "results").mkdir(exist_ok=True)
+MESH_DIR.mkdir(exist_ok=True)
+MAX_MESH_BYTES = 4_000_000        # point cloud ต่อโมเดลไม่ควรเกินนี้
 
 if not ADMIN_KEY or not WORKER_KEY:
     raise RuntimeError("ต้องตั้ง SPR_ADMIN_KEY และ SPR_WORKER_KEY ก่อนรัน server")
@@ -292,6 +295,51 @@ def list_models():
 # ----------------------------------------------------------------------
 # Worker API — เครื่อง simulation เรียกเข้ามา
 # ----------------------------------------------------------------------
+
+def _safe_mesh_name(name: str) -> str:
+    if not name or any(c in name for c in "/\\") or ".." in name or not name.endswith(".stl"):
+        raise HTTPException(400, "ชื่อโมเดลไม่ถูกต้อง")
+    return name
+
+
+@app.get("/api/worker/mesh-manifest", dependencies=[Depends(require_worker)])
+def mesh_manifest():
+    """worker เช็คว่ามี mesh ตัวไหน (hash อะไร) แล้วบ้าง → ส่งเฉพาะที่เปลี่ยน"""
+    out = {}
+    for p in MESH_DIR.glob("*.json"):
+        try:
+            out[p.stem + ".stl"] = json.loads(p.read_text(encoding="utf-8")).get("hash")
+        except (OSError, ValueError):
+            continue
+    return out
+
+
+@app.post("/api/worker/meshes", dependencies=[Depends(require_worker)])
+async def upload_mesh(request: Request):
+    raw = await request.body()
+    if len(raw) > MAX_MESH_BYTES:
+        raise HTTPException(413, "mesh preview ใหญ่เกินไป")
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "invalid JSON")
+    name = _safe_mesh_name(str(body.get("name", "")))
+    rec = {"name": name, "hash": body.get("hash"),
+           "points": body.get("points", []), "bbox": body.get("bbox")}
+    if not isinstance(rec["points"], list):
+        raise HTTPException(400, "points ต้องเป็น array")
+    (MESH_DIR / (name[:-4] + ".json")).write_text(
+        json.dumps(rec), encoding="utf-8")
+    return {"ok": True, "name": name, "points": len(rec["points"])}
+
+
+@app.get("/api/meshes/{name}", dependencies=[Depends(require_admin)])
+def get_mesh(name: str):
+    p = MESH_DIR / (_safe_mesh_name(name)[:-4] + ".json")
+    if not p.exists():
+        raise HTTPException(404, "ยังไม่มี preview ของโมเดลนี้ (รอ worker อัปโหลด)")
+    return json.loads(p.read_text(encoding="utf-8"))
+
 
 @app.post("/api/worker/register", dependencies=[Depends(require_worker)])
 async def register_worker(request: Request):
@@ -624,6 +672,38 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   </section>
   <section class="card">
     <div class="card-head">
+      <h2>🔭 Preview ตำแหน่ง (ก่อนรันจริง)</h2>
+      <span class="card-hint">ดูวัตถุ · source · ลำแสง · ฉากรับ แบบเรขาคณิต (ไม่ใช่ Monte Carlo)</span>
+    </div>
+    <div class="grid">
+      <div class="field"><label for="pv_model">โมเดลที่ดู</label><select id="pv_model"></select></div>
+      <div class="field"><label for="pv_sx">Source X (มม.)</label><input id="pv_sx" type="number" value="0"></div>
+      <div class="field"><label for="pv_sy">Source Y (มม.)</label><input id="pv_sy" type="number" value="0"></div>
+      <div class="field"><label for="pv_sz">Source Z (มม.)</label><input id="pv_sz" type="number" value="-800"></div>
+      <div class="field"><label for="pv_odd">ระยะวัตถุ→ฉากรับ ODD (มม.)</label><input id="pv_odd" type="number" value="400"></div>
+      <div class="field"><label for="pv_field">ขนาดลำแสง ⌀ (มม., 0=เต็มฟิล์ม)</label><input id="pv_field" type="number" value="0"></div>
+    </div>
+    <div id="pv_info" style="font-family:var(--font-mono);font-size:12px;color:var(--fg-soft);margin:2px 0 10px"></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+      <figure style="margin:0"><canvas id="pv_plan" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
+        <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">Plan — มองจากด้านบน (X↔, Z↕)</figcaption></figure>
+      <figure style="margin:0"><canvas id="pv_front" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
+        <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">Front — มองตามแนวลำแสง (X↔, Y↕)</figcaption></figure>
+      <figure style="margin:0"><canvas id="pv_side" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
+        <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">Side — มองจากด้านข้าง (Z↔, Y↕)</figcaption></figure>
+      <figure style="margin:0"><canvas id="pv_iso" width="360" height="260" style="width:100%;border:1px solid var(--line);border-radius:8px;background:#fbfafb"></canvas>
+        <figcaption style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft);margin-top:3px">3D — ไอโซเมตริก</figcaption></figure>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="pvReset()">รีเซ็ตตำแหน่งเริ่มต้น</button>
+      <label style="font-size:12.5px;display:flex;gap:7px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="pv_apply" checked style="width:auto"> ใช้ตำแหน่ง/ลำแสงนี้ตอนกดส่งงาน</label>
+      <span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-soft)">
+        <span style="color:#c1121f">●</span> source/ลำแสง &nbsp; <span style="color:#2563eb">▭</span> ฉากรับ &nbsp; <span style="color:#3c4655">·</span> วัตถุ</span>
+    </div>
+  </section>
+  <section class="card">
+    <div class="card-head">
       <h2>รายการงาน</h2>
       <button class="btn btn-ghost btn-sm" onclick="refresh()">
         <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
@@ -700,6 +780,12 @@ async function loadModels() {
         if (models.includes(cur)) sel.value = cur;
         else if (id === 'fracture_stl') sel.value = models.find(m => m !== document.getElementById('control_stl').value) || models[0] || '';
       }
+      const pvsel = document.getElementById('pv_model');
+      const pvcur = pvsel.value;
+      pvsel.innerHTML = models.map(m => `<option>${esc(m)}</option>`).join('') ||
+                        '<option value="">(ยังไม่มีโมเดล)</option>';
+      pvsel.value = models.includes(pvcur) ? pvcur : (models[0] || '');
+      pvLoadMesh(pvsel.value);
     }
     const online = ws.filter(w => Date.now() - Date.parse(w.last_seen) < 90000);
     const line = document.getElementById('workerline');
@@ -723,6 +809,11 @@ async function submitJob() {
     p.control_stl = document.getElementById('control_stl').value;
     p.fracture_stl = document.getElementById('fracture_stl').value;
   } else { p.stl = document.getElementById('control_stl').value; }
+  if (document.getElementById('pv_apply').checked) {   // แนบตำแหน่ง source 3D + ลำแสงจาก Preview
+    const v = pvVals();
+    p.src_x = v.sx; p.src_y = v.sy; p.src_z = v.sz;
+    p.odd = v.odd; p.field_mm = v.field;
+  }
   btn.disabled = true;
   const html0 = btn.innerHTML;
   btn.innerHTML = '<span class="spinner"></span>กำลังส่ง…';
@@ -792,7 +883,114 @@ async function showJob(id) {
 }
 dlg.addEventListener('close', () => watching = null);
 
+// ---------------- Preview ตำแหน่ง (เรขาคณิต, ไม่ใช่ Monte Carlo) ----------------
+const PV = { pts: null, name: null };
+const FILM_MM = 400;                       // ขนาดฟิล์มดีฟอลต์ (film_xy) สำหรับวาดฉากรับ
+const PV_IDS = ['pv_sx','pv_sy','pv_sz','pv_odd','pv_field'];
+
+function pvVals() {
+  const g = id => +document.getElementById(id).value;
+  return { sx: g('pv_sx'), sy: g('pv_sy'), sz: g('pv_sz'),
+           odd: Math.max(50, g('pv_odd')), field: Math.max(0, g('pv_field')) };
+}
+function pvReset() {
+  const set = (id,v)=>document.getElementById(id).value=v;
+  set('pv_sx',0); set('pv_sy',0); set('pv_sz',-800); set('pv_odd',400); set('pv_field',0);
+  pvDraw();
+}
+async function pvLoadMesh(name) {
+  if (!name) { PV.pts = null; pvDraw(); return; }
+  if (PV.name === name && PV.pts) { pvDraw(); return; }
+  try {
+    const r = await api('/api/meshes/' + encodeURIComponent(name));
+    if (!r.ok) { PV.pts = null; PV.name = name; pvDraw('(ยังไม่มี preview ของโมเดลนี้ — รอ worker อัปโหลด)'); return; }
+    const d = await r.json();
+    PV.pts = d.points || []; PV.name = name; pvDraw();
+  } catch (e) { PV.pts = null; pvDraw(); }
+}
+
+const V3 = {
+  sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],
+  add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
+  mul:(a,s)=>[a[0]*s,a[1]*s,a[2]*s],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],
+  norm:a=>{const n=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/n,a[1]/n,a[2]/n];},
+};
+// projection แต่ละมุมมอง: world[x,y,z] -> screen[u,v] (v ชี้ลงบน canvas)
+const PROJ = {
+  plan: p => [p[0], p[2]],          // มองบน: X แนวนอน, Z แนวตั้ง (source z<0 อยู่บน)
+  front:p => [p[0], -p[1]],         // มองตามลำแสง: X, Y(ขึ้น)
+  side: p => [p[2], -p[1]],         // มองข้าง: Z, Y(ขึ้น)
+  iso:  p => { const c=0.8660254, s=0.5;
+               return [(p[0]-p[2])*c, (p[0]+p[2])*s - p[1]]; },
+};
+
+function pvScene() {
+  const v = pvVals();
+  const S = [v.sx, v.sy, v.sz];
+  const sod = Math.hypot(v.sx, v.sy, v.sz) || 1;
+  const u = [-S[0]/sod, -S[1]/sod, -S[2]/sod];       // ทิศลำแสง source->วัตถุ
+  const Dc = V3.mul(u, v.odd);                       // ศูนย์กลางฉากรับ (หลังวัตถุ)
+  let up = Math.abs(u[1]) > 0.99 ? [1,0,0] : [0,1,0];
+  const a = V3.norm(V3.cross(u, up)), b = V3.cross(u, a);   // แกนในระนาบฉากรับ
+  const hf = v.field > 0 ? v.field/2 : FILM_MM*Math.SQRT2/2;
+  const cor = (r, sa, sb) => V3.add(Dc, V3.add(V3.mul(a, sa*r), V3.mul(b, sb*r)));
+  const det = [cor(FILM_MM/2,1,1), cor(FILM_MM/2,1,-1), cor(FILM_MM/2,-1,-1), cor(FILM_MM/2,-1,1)];
+  const fld = [cor(hf,1,1), cor(hf,1,-1), cor(hf,-1,-1), cor(hf,-1,1)];
+  return { S, Dc, det, fld, sod, sid: sod + v.odd, v };
+}
+
+function pvView(cid, projKey) {
+  const cv = document.getElementById(cid); if (!cv) return;
+  const ctx = cv.getContext('2d'); const W = cv.width, H = cv.height;
+  ctx.clearRect(0,0,W,H);
+  const proj = PROJ[projKey];
+  const sc = pvScene();
+  const obj = PV.pts || [];
+  const world = [...obj, sc.S, sc.Dc, ...sc.det, ...sc.fld];
+  const P = world.map(proj);
+  let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+  for (const q of P){ mnx=Math.min(mnx,q[0]);mxx=Math.max(mxx,q[0]);mny=Math.min(mny,q[1]);mxy=Math.max(mxy,q[1]); }
+  const pad=18, sw=(mxx-mnx)||1, sh=(mxy-mny)||1;
+  const s = Math.min((W-2*pad)/sw, (H-2*pad)/sh);
+  const ox = (W - sw*s)/2 - mnx*s, oy = (H - sh*s)/2 - mny*s;
+  const T = w => { const q = proj(w); return [q[0]*s+ox, q[1]*s+oy]; };
+  const poly = (pts, close) => { ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); if(close)ctx.closePath(); };
+  // ฉากรับ (น้ำเงิน)
+  ctx.lineWidth=1.4; ctx.strokeStyle='#2563eb'; ctx.fillStyle='rgba(37,99,235,.07)';
+  poly(sc.det.map(T), true); ctx.fill(); ctx.stroke();
+  // ลำแสงจาก source ไปมุมสนาม (แดงจาง) + แกนลำแสง
+  const sp = T(sc.S);
+  ctx.strokeStyle='rgba(193,18,31,.45)'; ctx.lineWidth=1;
+  for (const c of sc.fld){ const cp=T(c); ctx.beginPath(); ctx.moveTo(sp[0],sp[1]); ctx.lineTo(cp[0],cp[1]); ctx.stroke(); }
+  ctx.strokeStyle='rgba(193,18,31,.3)'; const dp=T(sc.Dc); ctx.beginPath(); ctx.moveTo(sp[0],sp[1]); ctx.lineTo(dp[0],dp[1]); ctx.stroke();
+  // กรอบสนามลำแสงที่ฉากรับ (แดงประ)
+  ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(193,18,31,.8)'; poly(sc.fld.map(T), true); ctx.stroke(); ctx.setLineDash([]);
+  // วัตถุ (จุดเทา)
+  ctx.fillStyle='rgba(60,70,85,.5)';
+  for (const w of obj){ const q=T(w); ctx.fillRect(q[0]-0.6, q[1]-0.6, 1.5, 1.5); }
+  // source (จุดแดง)
+  ctx.fillStyle='#c1121f'; ctx.beginPath(); ctx.arc(sp[0],sp[1],4.5,0,7); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(sp[0],sp[1],1.7,0,7); ctx.fill();
+}
+
+let pvMsg = '';
+function pvDraw(msg) {
+  if (msg !== undefined) pvMsg = msg;
+  pvView('pv_plan','plan'); pvView('pv_front','front'); pvView('pv_side','side'); pvView('pv_iso','iso');
+  const sc = pvScene();
+  const ang = Math.atan((sc.v.field>0? sc.v.field/2 : FILM_MM*Math.SQRT2/2)/sc.sid)*180/Math.PI;
+  document.getElementById('pv_info').textContent =
+    `SOD ${sc.sod.toFixed(0)} มม. · SID ${sc.sid.toFixed(0)} มม. · ครึ่งมุมลำแสง ${ang.toFixed(1)}° · `
+    + `ลำแสง ${sc.v.field>0? sc.v.field+' มม.' : 'เต็มฟิล์ม'}` + (pvMsg? '  — '+pvMsg : '');
+}
+function pvInit() {
+  PV_IDS.forEach(id => document.getElementById(id).addEventListener('input', () => pvDraw('')));
+  document.getElementById('pv_model').addEventListener('change', e => pvLoadMesh(e.target.value));
+  pvDraw('');
+}
+
 setInterval(() => { refresh(); loadModels(); if (watching) showJob(watching); }, 5000);
-(async () => { if (await ensureLogin(false)) { loadModels(); refresh(); } })();
+(async () => { if (await ensureLogin(false)) { pvInit(); loadModels(); refresh(); } })();
 </script></body></html>
 """

@@ -36,8 +36,11 @@ def _add_config_args(p: argparse.ArgumentParser) -> None:
                    help="parallelism: single=1 proc, balanced=cpu-2, max=all cpu "
                         "(RAM-capped; --n_procs overrides)")
     for name in ("sod", "odd", "film_xy", "film_thickness", "energy_keV",
-                 "rot_x", "rot_y", "rot_z", "primary_theta_deg", "primary_dE_keV"):
+                 "rot_x", "rot_y", "rot_z", "primary_theta_deg", "primary_dE_keV",
+                 "field_mm"):
         p.add_argument(f"--{name}", type=float, default=getattr(defaults, name))
+    for name in ("src_x", "src_y", "src_z"):     # ตำแหน่ง source 3D (default: 0,0,-sod)
+        p.add_argument(f"--{name}", type=float, default=None)
     p.add_argument("--object_material", default=defaults.object_material)
     p.add_argument("--no_center_mesh", action="store_true", help="Do not auto-center STL")
     p.add_argument("--no_phsp", action="store_true", help="Skip phase-space / SPR")

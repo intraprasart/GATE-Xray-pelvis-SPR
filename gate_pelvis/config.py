@@ -42,6 +42,15 @@ class SimConfig:
     energy_keV: float = 80.0              # mono-energetic beam (keV)
     object_material: str = "G4_BONE_COMPACT_ICRU"
 
+    # --- Source position (3D) + collimation (v1.1) ---
+    # ตำแหน่ง source ใน world frame (mm) — None = ค่าเดิม (0, 0, -sod)
+    # ลำแสงเล็งเข้าศูนย์กลางวัตถุ (origin) เสมอ และฉากรับตั้งฉากกับแนวลำแสง
+    # อยู่หลังวัตถุที่ระยะ odd โดยอัตโนมัติ (ผ่าน beam-frame transform ใน engine)
+    src_x: float | None = None
+    src_y: float | None = None
+    src_z: float | None = None
+    field_mm: float = 0.0                 # เส้นผ่านศูนย์กลางลำแสงที่ระนาบฉากรับ; <=0 = เต็มฟิล์ม
+
     # --- Mesh placement ---
     center_mesh: bool = True              # auto-center STL bbox at origin (needs trimesh)
     rot_x: float = 0.0
@@ -63,9 +72,22 @@ class SimConfig:
 
     # ----- Derived geometry helpers -----
     @property
+    def source_world_mm(self) -> np.ndarray:
+        """ตำแหน่ง source ใน world frame ตามที่ผู้ใช้กำหนด (default: บนแกน -z)"""
+        if self.src_x is None or self.src_y is None or self.src_z is None:
+            return np.array([0.0, 0.0, -float(self.sod)], dtype=np.float64)
+        return np.array([float(self.src_x), float(self.src_y), float(self.src_z)],
+                        dtype=np.float64)
+
+    @property
+    def sod_eff(self) -> float:
+        """ระยะ source→ศูนย์กลางวัตถุจริง (mm) — ขึ้นกับตำแหน่ง source 3D"""
+        return float(np.linalg.norm(self.source_world_mm))
+
+    @property
     def sid(self) -> float:
         """Source-to-image distance (mm)."""
-        return self.sod + self.odd
+        return self.sod_eff + self.odd
 
     @property
     def pixel_size_mm(self) -> float:
@@ -73,7 +95,9 @@ class SimConfig:
 
     @property
     def source_pos_mm(self) -> np.ndarray:
-        return np.array([0.0, 0.0, -float(self.sod)], dtype=np.float64)
+        """ตำแหน่ง source ใน BEAM frame (ที่ engine/phasespace ใช้จริง):
+        แกนลำแสงถูกหมุนให้เป็น +z เสมอ → source อยู่ที่ (0,0,-sod_eff)"""
+        return np.array([0.0, 0.0, -self.sod_eff], dtype=np.float64)
 
     @property
     def out_path(self) -> Path:

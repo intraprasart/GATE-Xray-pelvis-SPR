@@ -83,14 +83,16 @@ def set_state(state: str, job: dict | None = None) -> None:
 def _heartbeat_loop() -> None:
     """เธรดเบื้องหลัง: รีเฟรช heartbeat local สม่ำเสมอ + ปิง server ให้เห็นว่า
     worker ยังออนไลน์ แม้กำลังรันงาน sharded ยาว ๆ ที่ไม่ได้ส่ง log ระหว่างนั้น
-    (กัน dashboard/monitor แสดง worker เป็นออฟไลน์ทั้งที่กำลังทำงาน)"""
+    ใช้ Session แยกของตัวเอง — requests.Session ใช้ข้ามเธรดไม่ปลอดภัย"""
+    hb_session = requests.Session()
+    hb_session.headers.update(HEADERS)
     last_ping = 0.0
     while True:
         time.sleep(HEARTBEAT_INTERVAL)
         write_heartbeat()
         if time.monotonic() - last_ping > 60:
             try:
-                register()
+                register(hb_session)
                 last_ping = time.monotonic()
             except requests.RequestException:
                 pass
@@ -122,11 +124,14 @@ MAX_RESULT_FILE_BYTES = 300 * 1024 * 1024
 INT_PARAMS = {"photons": (1, MAX_PHOTONS), "pix": (16, 2048),
               "threads": (1, os.cpu_count() or 1)}
 FLOAT_PARAMS = {"energy_keV": (1.0, 1000.0), "sod": (10.0, 5000.0),
-                "odd": (0.0, 5000.0), "film_xy": (10.0, 2000.0),
+                "odd": (50.0, 2000.0), "film_xy": (10.0, 2000.0),
                 "film_thickness": (0.1, 100.0),
                 "rot_x": (-360.0, 360.0), "rot_y": (-360.0, 360.0),
                 "rot_z": (-360.0, 360.0),
-                "primary_theta_deg": (0.01, 90.0), "primary_dE_keV": (0.01, 100.0)}
+                "primary_theta_deg": (0.01, 90.0), "primary_dE_keV": (0.01, 100.0),
+                # v1.1: ตำแหน่ง source 3D + ขนาดสนามลำแสง (collimation)
+                "src_x": (-5000.0, 5000.0), "src_y": (-5000.0, 5000.0),
+                "src_z": (-5000.0, 5000.0), "field_mm": (0.0, 2000.0)}
 
 
 def log_local(msg: str) -> None:
@@ -156,9 +161,58 @@ def _kill_tree(proc: subprocess.Popen) -> None:
 # คุยกับ server
 # ----------------------------------------------------------------------
 
-def register() -> None:
+def _file_md5(path: Path) -> str:
+    import hashlib
+    h = hashlib.md5()
+    with path.open("rb") as f:
+        while chunk := f.read(1 << 20):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _mesh_preview(stl: Path, n_points: int = 2500) -> dict | None:
+    """point cloud คร่าว ๆ ของ STL (centered) สำหรับหน้า Preview บน dashboard"""
+    try:
+        import trimesh
+        mesh = trimesh.load(str(stl), force="mesh")
+        if mesh.is_empty:
+            return None
+        lo, hi = mesh.bounds
+        center = (lo + hi) / 2.0
+        pts = mesh.sample(n_points) - center
+        return {"points": [[round(float(x), 1) for x in p] for p in pts],
+                "bbox": [[round(float(v), 1) for v in (lo - center)],
+                         [round(float(v), 1) for v in (hi - center)]]}
+    except Exception as e:  # noqa: BLE001 — preview เสียไม่ควรล้ม worker
+        log_local(f"สร้าง mesh preview ของ {stl.name} ไม่ได้: {e}")
+        return None
+
+
+def sync_meshes() -> None:
+    """ส่ง point cloud ของโมเดลให้ server เฉพาะตัวที่ยังไม่มี/ไฟล์เปลี่ยน"""
+    try:
+        r = SESSION.get(f"{SERVER}/api/worker/mesh-manifest", timeout=30)
+        have = r.json() if r.status_code == 200 else {}
+    except (requests.RequestException, ValueError):
+        return
+    for p in sorted(MODELS_DIR.glob("*.stl")):
+        h = _file_md5(p)
+        if have.get(p.name) == h:
+            continue
+        prev = _mesh_preview(p)
+        if prev is None:
+            continue
+        try:
+            SESSION.post(f"{SERVER}/api/worker/meshes",
+                         json={"name": p.name, "hash": h, **prev}, timeout=60)
+            log_local(f"อัปโหลด mesh preview: {p.name} ({len(prev['points'])} จุด)")
+        except requests.RequestException as e:
+            log_local(f"อัปโหลด mesh preview {p.name} ไม่สำเร็จ: {e}")
+
+
+def register(session: requests.Session | None = None) -> None:
     models = sorted(p.name for p in MODELS_DIR.glob("*.stl"))
-    SESSION.post(f"{SERVER}/api/worker/register", json={
+    (session or SESSION).post(f"{SERVER}/api/worker/register", json={
         "worker_id": WORKER_ID,
         "models": models,
         "machine": {"platform": platform.platform(), "cpu_count": os.cpu_count(),
@@ -450,6 +504,7 @@ def main() -> None:
         try:
             if time.monotonic() - last_register > 300:
                 register()
+                sync_meshes()          # ส่ง point cloud ให้หน้า Preview (เฉพาะที่เปลี่ยน)
                 last_register = time.monotonic()
             job = claim()
         except requests.RequestException as e:

@@ -30,6 +30,31 @@ def _center_translation_from_stl(stl_path: Path):
     return (-float(c[0]), -float(c[1]), -float(c[2]))
 
 
+def _beam_rotation(src_world) -> "np.ndarray":
+    """Rotation ที่หมุน world frame → beam frame (แกนลำแสงกลายเป็น +z).
+
+    ลำแสงวิ่งจาก source เข้าหา origin: แกน u = -src/|src|. คืนเมทริกซ์ R ที่
+    R @ u = ez (Rodrigues). การย้าย source รอบวัตถุจึงเทียบเท่าการหมุนวัตถุ
+    ในทางฟิสิกส์ทุกประการ — engine คงยิงตาม +z และฉากรับอยู่หลังวัตถุเสมอ.
+    """
+    import numpy as np
+    src = np.asarray(src_world, dtype=np.float64)
+    norm = float(np.linalg.norm(src))
+    if norm < 50.0:
+        raise ValueError(f"source ใกล้ศูนย์กลางวัตถุเกินไป ({norm:.1f} mm < 50 mm)")
+    u = -src / norm                      # ทิศลำแสง (source → origin)
+    e = np.array([0.0, 0.0, 1.0])
+    c = float(np.dot(u, e))
+    if c > 1.0 - 1e-12:                  # ตรงแนว +z อยู่แล้ว
+        return np.eye(3)
+    if c < -1.0 + 1e-12:                 # สวนแนวพอดี → หมุน 180° รอบแกน x
+        return np.diag([1.0, -1.0, -1.0])
+    v = np.cross(u, e)
+    s2 = float(np.dot(v, v))
+    K = np.array([[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]])
+    return np.eye(3) + K + K @ K * ((1.0 - c) / s2)
+
+
 def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool,
                      photons: int | None = None, seed: int | None = None):
     """Construct (but do not run) a GATE Simulation for one phase.
@@ -64,6 +89,11 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool,
     film.translation = [0.0, 0.0, float(cfg.odd) * mm]
     film.material = "G4_AIR"
 
+    # Beam-frame transform: หมุน world → beam frame ตามตำแหน่ง source 3 มิติ
+    # (identity ถ้า source อยู่บนแกน -z แบบเดิม)
+    import numpy as np
+    R_beam = _beam_rotation(cfg.source_world_mm)
+
     # Object mesh (only for the "object" phase)
     if with_object:
         stl_abs = str(Path(cfg.stl).resolve())
@@ -76,27 +106,39 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool,
         pelvis.translation = [0.0, 0.0, 0.0]
         pelvis.file_name = stl_abs
 
-        if any(abs(r) > 1e-9 for r in (cfg.rot_x, cfg.rot_y, cfg.rot_z)):
-            pelvis.rotation = _rotation_matrix(cfg.rot_x, cfg.rot_y, cfg.rot_z)
+        # การวางใน GATE: world_p = R @ local_p + T
+        # ต้องการ: จัดกลาง (local_p + t_center) → หมุนของผู้ใช้ → หมุนเข้า beam frame
+        # ⇒ R_total = R_beam @ R_user, T = R_total @ t_center
+        R_user = _rotation_matrix(cfg.rot_x, cfg.rot_y, cfg.rot_z) \
+            if any(abs(r) > 1e-9 for r in (cfg.rot_x, cfg.rot_y, cfg.rot_z)) else np.eye(3)
+        R_total = R_beam @ R_user
+        if not np.allclose(R_total, np.eye(3)):
+            pelvis.rotation = R_total
 
         if cfg.center_mesh:
             t = _center_translation_from_stl(Path(cfg.stl))
             if t is not None:
-                pelvis.translation = [t[0] * mm, t[1] * mm, t[2] * mm]
-                print(f"Centering mesh: translation = {pelvis.translation}")
+                t_rot = R_total @ np.asarray(t, dtype=np.float64)
+                pelvis.translation = [t_rot[0] * mm, t_rot[1] * mm, t_rot[2] * mm]
+                print(f"Centering mesh (beam frame): translation = {pelvis.translation}")
 
     # Physics
     sim.physics_manager.physics_list_name = "G4EmLivermorePhysics"
 
     # Point source aimed at the film, mono-energetic
+    # (ใน beam frame: source อยู่บนแกน -z ที่ระยะ sod_eff เสมอ)
     src = sim.add_source("GenericSource", "src")
     src.particle = "gamma"
     src.n = int(cfg.photons if photons is None else photons)
     src.position.type = "point"
-    src.position.translation = [0.0, 0.0, -float(cfg.sod) * mm]
+    src.position.translation = [0.0, 0.0, -cfg.sod_eff * mm]
 
+    # Collimation: จำกัดกรวยลำแสงตามขนาดสนามที่ระนาบฉากรับ
+    # field_mm <= 0 → เต็มฟิล์ม (ครอบมุมฟิล์มเหมือนเดิม)
     half_diag = 0.5 * float(cfg.film_xy) * math.sqrt(2.0)
-    alpha = math.degrees(math.atan(half_diag / float(cfg.sid)))
+    half_field = half_diag if float(cfg.field_mm) <= 0 else \
+        min(max(0.5 * float(cfg.field_mm), 0.5), half_diag)
+    alpha = math.degrees(math.atan(half_field / float(cfg.sid)))
     src.direction.type = "iso"
     src.direction.phi = [0 * deg, 360 * deg]
     src.direction.theta = [(180.0 - alpha) * deg, 180.0 * deg]
