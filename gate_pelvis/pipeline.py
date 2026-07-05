@@ -43,13 +43,17 @@ def _log(progress: ProgressFn | None, msg: str) -> None:
 def _worker_env() -> dict:
     env = dict(os.environ)
     env["PYTHONPATH"] = _PKG_PARENT + os.pathsep + env.get("PYTHONPATH", "")
+    env["PYTHONIOENCODING"] = "utf-8"          # ให้โปรเซสลูกพ่น utf-8
     return env
 
 
 def _spawn(config_path: Path, phase: str, extra: list[str], stdout):
     cmd = [sys.executable, "-u", "-m", "gate_pelvis._worker", str(config_path), phase, *extra]
+    # encoding="utf-8" + errors="replace": อย่าให้ parent crash ตอน decode output ของ
+    # GATE/Geant4 บน Windows ไทย (คอนโซลเดิมเป็น cp874 → byte แปลก ๆ ทำ decode พังทั้ง job)
     return subprocess.Popen(cmd, cwd=_PKG_PARENT, env=_worker_env(),
-                            stdout=stdout, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                            stdout=stdout, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace", bufsize=1)
 
 
 def _run_phase(cfg: SimConfig, config_path: Path, phase: str,
