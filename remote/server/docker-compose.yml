@@ -4,7 +4,9 @@ services:
     container_name: spr-jobserver
     restart: unless-stopped
     ports:
-      - "8642:8642"
+      # bind แค่ localhost — ให้เข้าผ่าน reverse proxy (nginx/Caddy) + HTTPS เท่านั้น
+      # (อย่าเปิด 0.0.0.0 ตรง ๆ เพราะ Docker เจาะทะลุ ufw)
+      - "127.0.0.1:8642:8642"
     environment:
       SPR_ADMIN_KEY: ${SPR_ADMIN_KEY:?ตั้งค่าใน .env}
       SPR_WORKER_KEY: ${SPR_WORKER_KEY:?ตั้งค่าใน .env}

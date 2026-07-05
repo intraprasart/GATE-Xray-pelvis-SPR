@@ -1,5 +1,5 @@
 {
-  "server_url": "http://YOUR-SERVER:8642",
+  "server_url": "https://YOUR-DOMAIN",
   "worker_key": "CHANGE-ME",
   "worker_id": "",
   "repo_dir": "D:/GATE-Xray-pelvis-SPR",

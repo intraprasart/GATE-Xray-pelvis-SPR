@@ -1,16 +1,18 @@
 """SPR Job Server — สั่งงาน simulation จากภายนอก + เก็บผลลัพธ์
 
 FastAPI app เดียวจบ: job queue (SQLite) + รับอัปโหลดผล + dashboard
-รันบน VPS:  uvicorn app:app --host 0.0.0.0 --port 8642
+รันบน VPS:  uvicorn app:app --host 0.0.0.0 --port 8642 --proxy-headers
 
 Environment variables (จำเป็น):
     SPR_ADMIN_KEY   คีย์สำหรับคน (ส่ง job / ดูผล)
     SPR_WORKER_KEY  คีย์สำหรับเครื่อง worker (รับ job / ส่งผล)
     SPR_DATA_DIR    โฟลเดอร์เก็บ DB + ผลลัพธ์ (default: ./data)
+    SPR_STALE_RUNNING_SECONDS  ถือว่า worker หายถ้าไม่ส่งสัญญาณเกินนี้ (default 600)
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import shutil
@@ -18,17 +20,24 @@ import sqlite3
 import threading
 import uuid
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 DATA_DIR = Path(os.environ.get("SPR_DATA_DIR", "./data")).resolve()
 ADMIN_KEY = os.environ.get("SPR_ADMIN_KEY", "")
 WORKER_KEY = os.environ.get("SPR_WORKER_KEY", "")
-MAX_LOG_CHARS = 800_000          # เก็บ log ท้ายสุดไม่เกินนี้ต่อ job
-MAX_UPLOAD_BYTES = 2_000_000_000
+STALE_RUNNING_SECONDS = int(os.environ.get("SPR_STALE_RUNNING_SECONDS", "600"))
+
+MAX_LOG_CHARS = 800_000            # เก็บ log ท้ายสุดไม่เกินนี้ต่อ job
+MAX_LOG_POST_BYTES = 2_000_000     # ขนาด body สูงสุดต่อการ POST /log หนึ่งครั้ง
+MAX_UPLOAD_BYTES = 2_000_000_000   # ขนาด zip (บีบอัด) สูงสุดที่รับ
+MAX_EXTRACT_BYTES = 6_000_000_000  # ขนาดรวมหลังคลายบีบอัด (กัน zip bomb)
+MAX_PENDING_JOBS = 200             # กันคิวถูกถล่ม
+TIMESTAMP_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 (DATA_DIR / "results").mkdir(exist_ok=True)
@@ -70,34 +79,84 @@ _db.commit()
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime(TIMESTAMP_FMT)
+
+
+def _cutoff_iso(seconds: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(seconds=seconds)).strftime(TIMESTAMP_FMT)
+
+
+def _safe_json(text: str | None):
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        return {"_unparsed": str(text)[:500]}
 
 
 def _job_row(row: sqlite3.Row, with_log: bool = False) -> dict:
     d = {k: row[k] for k in row.keys() if k != "log"}
-    d["params"] = json.loads(d["params"])
-    d["metrics"] = json.loads(d["metrics"]) if d["metrics"] else None
+    d["params"] = _safe_json(d["params"]) or {}
+    d["metrics"] = _safe_json(d["metrics"])
     if with_log:
         d["log"] = row["log"]
     return d
 
 
+def _requeue_stale_running() -> None:
+    """Mark jobs whose worker went silent as failed (called under _lock)."""
+    cutoff = _cutoff_iso(STALE_RUNNING_SECONDS)
+    _db.execute(
+        "UPDATE jobs SET status='failed', finished_at=?, "
+        "error='worker หายระหว่างรัน (ไม่มีสัญญาณเกินกำหนด)' "
+        "WHERE status='running' AND claimed_at < ? AND NOT EXISTS "
+        "  (SELECT 1 FROM workers w WHERE w.worker_id = jobs.worker_id AND w.last_seen >= ?)",
+        (_now(), cutoff, cutoff))
+
+
 # ----------------------------------------------------------------------
-# Auth — รับคีย์ทาง header X-API-Key หรือ query ?key=
+# Auth — รับคีย์ทาง header X-API-Key หรือ cookie (dashboard) เท่านั้น
+#         ไม่รับทาง query string อีกต่อไป (กันคีย์หลุดลง access log / history)
 # ----------------------------------------------------------------------
 
-def _get_key(request: Request, key: str | None) -> str:
-    return request.headers.get("X-API-Key") or key or ""
+def _key_matches(candidate: str | None, expected: str) -> bool:
+    return bool(candidate) and hmac.compare_digest(candidate, expected)
 
 
-def require_admin(request: Request, key: str | None = Query(default=None)):
-    if _get_key(request, key) != ADMIN_KEY:
-        raise HTTPException(401, "invalid admin key")
+def require_admin(request: Request):
+    if _key_matches(request.headers.get("X-API-Key"), ADMIN_KEY):
+        return
+    if _key_matches(request.cookies.get("spr_admin"), ADMIN_KEY):
+        return
+    raise HTTPException(401, "invalid admin key")
 
 
-def require_worker(request: Request, key: str | None = Query(default=None)):
-    if _get_key(request, key) != WORKER_KEY:
-        raise HTTPException(401, "invalid worker key")
+def require_worker(request: Request):
+    if _key_matches(request.headers.get("X-API-Key"), WORKER_KEY):
+        return
+    raise HTTPException(401, "invalid worker key")
+
+
+@app.post("/api/login")
+async def login(request: Request):
+    """แลกคีย์เป็น cookie (HttpOnly) ให้ dashboard ใช้ — คีย์ไม่โผล่ใน URL อีก"""
+    body = await request.json()
+    key = body.get("key", "")
+    if not _key_matches(key, ADMIN_KEY):
+        raise HTTPException(401, "invalid key")
+    secure = (request.headers.get("x-forwarded-proto", request.url.scheme) == "https")
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie("spr_admin", key, httponly=True, samesite="lax",
+                    secure=secure, max_age=30 * 24 * 3600)
+    return resp
+
+
+@app.post("/api/logout")
+async def logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("spr_admin")
+    return resp
 
 
 # ----------------------------------------------------------------------
@@ -118,6 +177,9 @@ async def submit_job(request: Request):
         raise HTTPException(400, "params ต้องเป็น object")
     job_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
     with _lock:
+        n = _db.execute("SELECT COUNT(*) FROM jobs WHERE status='pending'").fetchone()[0]
+        if n >= MAX_PENDING_JOBS:
+            raise HTTPException(429, f"คิวเต็ม (pending {n} งาน) — รอให้ประมวลผลก่อน")
         _db.execute(
             "INSERT INTO jobs (id, created_at, type, params, status) VALUES (?,?,?,?,?)",
             (job_id, _now(), jtype, json.dumps(params), "pending"))
@@ -127,6 +189,7 @@ async def submit_job(request: Request):
 
 @app.get("/api/jobs", dependencies=[Depends(require_admin)])
 def list_jobs(limit: int = 100):
+    limit = max(1, min(int(limit), 1000))
     with _lock:
         rows = _db.execute(
             "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
@@ -154,18 +217,30 @@ def cancel_job(job_id: str):
     return {"id": job_id, "status": "cancelled"}
 
 
+@app.post("/api/jobs/{job_id}/force-fail", dependencies=[Depends(require_admin)])
+def force_fail_job(job_id: str):
+    """บังคับปิด job ที่ค้าง running (เช่น worker ตายไปแล้ว)"""
+    with _lock:
+        cur = _db.execute(
+            "UPDATE jobs SET status='failed', finished_at=?, "
+            "error='ปิดโดยผู้ดูแล (force-fail)' WHERE id=? AND status IN ('pending','running')",
+            (_now(), job_id))
+        _db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(409, "บังคับปิดได้เฉพาะ job ที่ยัง pending/running")
+    return {"id": job_id, "status": "failed"}
+
+
 @app.delete("/api/jobs/{job_id}", dependencies=[Depends(require_admin)])
 def delete_job(job_id: str):
     with _lock:
-        cur = _db.execute(
-            "DELETE FROM jobs WHERE id=? AND status != 'running'", (job_id,))
+        cur = _db.execute("DELETE FROM jobs WHERE id=?", (job_id,))
         _db.commit()
     if cur.rowcount == 0:
-        raise HTTPException(409, "ลบไม่ได้ (ไม่พบ หรือกำลังรันอยู่)")
+        raise HTTPException(404, "job not found")
     zip_path = DATA_DIR / "results" / f"{job_id}.zip"
     dir_path = DATA_DIR / "results" / job_id
-    if zip_path.exists():
-        zip_path.unlink()
+    zip_path.unlink(missing_ok=True)
     if dir_path.exists():
         shutil.rmtree(dir_path, ignore_errors=True)
     return {"id": job_id, "deleted": True}
@@ -179,9 +254,13 @@ def download_results(job_id: str):
     return FileResponse(zip_path, filename=f"{job_id}.zip")
 
 
+def _results_base(job_id: str) -> Path:
+    return (DATA_DIR / "results" / job_id).resolve()
+
+
 @app.get("/api/jobs/{job_id}/files", dependencies=[Depends(require_admin)])
 def list_result_files(job_id: str):
-    base = DATA_DIR / "results" / job_id
+    base = _results_base(job_id)
     if not base.exists():
         return []
     return sorted(str(p.relative_to(base)).replace("\\", "/")
@@ -190,9 +269,9 @@ def list_result_files(job_id: str):
 
 @app.get("/api/jobs/{job_id}/file", dependencies=[Depends(require_admin)])
 def get_result_file(job_id: str, path: str):
-    base = (DATA_DIR / "results" / job_id).resolve()
+    base = _results_base(job_id)
     target = (base / path).resolve()
-    if not str(target).startswith(str(base)) or not target.is_file():
+    if not target.is_relative_to(base) or not target.is_file():
         raise HTTPException(404, "file not found")
     return FileResponse(target)
 
@@ -204,7 +283,7 @@ def list_models():
         rows = _db.execute("SELECT * FROM workers").fetchall()
     out = []
     for r in rows:
-        info = json.loads(r["info"] or "{}")
+        info = _safe_json(r["info"]) or {}
         out.append({"worker_id": r["worker_id"], "last_seen": r["last_seen"],
                     "models": info.get("models", []), "machine": info.get("machine", {})})
     return out
@@ -234,6 +313,7 @@ async def claim_job(request: Request):
     worker_id = str(body.get("worker_id", "unknown"))[:64]
     with _lock:
         _db.execute("UPDATE workers SET last_seen=? WHERE worker_id=?", (_now(), worker_id))
+        _requeue_stale_running()
         row = _db.execute(
             "SELECT * FROM jobs WHERE status='pending' ORDER BY created_at LIMIT 1").fetchone()
         if row is None:
@@ -243,20 +323,51 @@ async def claim_job(request: Request):
             "UPDATE jobs SET status='running', claimed_at=?, worker_id=? WHERE id=?",
             (_now(), worker_id, row["id"]))
         _db.commit()
-    return {"id": row["id"], "type": row["type"], "params": json.loads(row["params"])}
+    return {"id": row["id"], "type": row["type"], "params": _safe_json(row["params"]) or {}}
 
 
 @app.post("/api/worker/jobs/{job_id}/log", dependencies=[Depends(require_worker)])
 async def append_log(job_id: str, request: Request):
-    text = (await request.body()).decode("utf-8", errors="replace")
+    raw = await request.body()
+    if len(raw) > MAX_LOG_POST_BYTES:
+        raw = raw[-MAX_LOG_POST_BYTES:]
+    text = raw.decode("utf-8", errors="replace")
     with _lock:
-        row = _db.execute("SELECT log FROM jobs WHERE id=?", (job_id,)).fetchone()
+        row = _db.execute("SELECT log, worker_id FROM jobs WHERE id=?", (job_id,)).fetchone()
         if not row:
             raise HTTPException(404, "job not found")
         new_log = (row["log"] + text)[-MAX_LOG_CHARS:]
         _db.execute("UPDATE jobs SET log=? WHERE id=?", (new_log, job_id))
+        # log ที่ไหลเข้ามา = worker ยังมีชีวิต → กัน stale-requeue ระหว่างงานยาว
+        if row["worker_id"]:
+            _db.execute("UPDATE workers SET last_seen=? WHERE worker_id=?",
+                        (_now(), row["worker_id"]))
         _db.commit()
     return {"ok": True}
+
+
+def _extract_zip(zip_path: Path, extract_dir: Path) -> None:
+    """แตก zip อย่างปลอดภัย: กัน zip-slip + จำกัดขนาดรวมหลังคลาย (blocking)."""
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir, ignore_errors=True)
+    extract_dir.mkdir(parents=True)
+    base = extract_dir.resolve()
+    total = 0
+    with zipfile.ZipFile(zip_path) as zf:
+        for m in zf.infolist():
+            dest = (extract_dir / m.filename).resolve()
+            if not dest.is_relative_to(base):
+                continue  # zip-slip — ข้าม
+            if m.is_dir():
+                dest.mkdir(parents=True, exist_ok=True)
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(m) as src, dest.open("wb") as out:
+                while chunk := src.read(1 << 20):
+                    total += len(chunk)
+                    if total > MAX_EXTRACT_BYTES:
+                        raise HTTPException(413, "ผลลัพธ์ใหญ่เกินไปหลังคลายบีบอัด")
+                    out.write(chunk)
 
 
 @app.post("/api/worker/jobs/{job_id}/complete", dependencies=[Depends(require_worker)])
@@ -267,6 +378,11 @@ async def complete_job(job_id: str,
                        file: UploadFile | None = None):
     if status not in ("done", "failed"):
         raise HTTPException(400, "status ต้องเป็น done หรือ failed")
+    if metrics:
+        try:
+            json.loads(metrics)
+        except ValueError:
+            raise HTTPException(400, "metrics ต้องเป็น JSON ที่ถูกต้อง")
     with _lock:
         row = _db.execute("SELECT id FROM jobs WHERE id=?", (job_id,)).fetchone()
     if not row:
@@ -283,22 +399,10 @@ async def complete_job(job_id: str,
                     zip_path.unlink(missing_ok=True)
                     raise HTTPException(413, "ไฟล์ใหญ่เกินไป")
                 f.write(chunk)
-        # แตก zip ไว้ให้ dashboard เปิดดูภาพได้ (กัน zip-slip ด้วยการเช็ค path)
-        extract_dir = DATA_DIR / "results" / job_id
-        if extract_dir.exists():
-            shutil.rmtree(extract_dir, ignore_errors=True)
-        extract_dir.mkdir(parents=True)
-        with zipfile.ZipFile(zip_path) as zf:
-            for m in zf.infolist():
-                dest = (extract_dir / m.filename).resolve()
-                if not str(dest).startswith(str(extract_dir.resolve())):
-                    continue
-                if m.is_dir():
-                    dest.mkdir(parents=True, exist_ok=True)
-                else:
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(m) as src, dest.open("wb") as out:
-                        shutil.copyfileobj(src, out)
+        try:
+            await run_in_threadpool(_extract_zip, zip_path, DATA_DIR / "results" / job_id)
+        except zipfile.BadZipFile:
+            raise HTTPException(400, "ไฟล์ zip เสียหาย")
 
     with _lock:
         _db.execute(
@@ -381,31 +485,61 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <p style="text-align:right"><button class="ghost" onclick="dlg.close()">ปิด</button></p>
 </div></dialog>
 <script>
-const KEY = localStorage.getItem('spr_key') || prompt('ใส่ Admin API key:');
-localStorage.setItem('spr_key', KEY);
-const H = { 'X-API-Key': KEY };
 const dlg = document.getElementById('dlg');
 let watching = null;
+let modelsCache = '';
+
+// escape ทุกค่าที่มาจาก worker/job ก่อนยัดลง innerHTML (กัน XSS)
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { credentials: 'same-origin', ...opts });
+  if (r.status === 401) { await ensureLogin(true); throw new Error('unauthorized'); }
+  return r;
+}
+
+async function ensureLogin(force) {
+  // ถ้า cookie ยังใช้ได้ ก็ผ่าน ไม่ต้องถาม
+  if (!force) {
+    const r = await fetch('/api/models', { credentials: 'same-origin' });
+    if (r.ok) return true;
+  }
+  for (;;) {
+    const key = prompt('ใส่ Admin API key:');
+    if (key === null) return false;
+    const r = await fetch('/api/login', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+    if (r.ok) return true;
+    alert('คีย์ไม่ถูกต้อง ลองใหม่');
+  }
+}
 
 document.getElementById('jtype').onchange = e =>
   document.getElementById('fr_wrap').style.display = e.target.value === 'run_pair' ? '' : 'none';
 
 async function loadModels() {
   try {
-    const ws = await (await fetch('/api/models', { headers: H })).json();
+    const r = await api('/api/models'); if (!r.ok) return;
+    const ws = await r.json();
     const models = [...new Set(ws.flatMap(w => w.models))];
-    for (const id of ['control_stl', 'fracture_stl']) {
-      const sel = document.getElementById(id);
-      sel.innerHTML = models.map(m => `<option>${m}</option>`).join('') ||
-                      '<option value="">(ยังไม่มี worker ลงทะเบียน)</option>';
+    const sig = models.join('|');
+    if (sig !== modelsCache) {            // สร้าง option ใหม่เฉพาะตอนรายชื่อเปลี่ยน (กันรีเซ็ตที่เลือกไว้)
+      modelsCache = sig;
+      for (const id of ['control_stl', 'fracture_stl']) {
+        const sel = document.getElementById(id);
+        const cur = sel.value;
+        sel.innerHTML = models.map(m => `<option>${esc(m)}</option>`).join('') ||
+                        '<option value="">(ยังไม่มี worker ลงทะเบียน)</option>';
+        if (models.includes(cur)) sel.value = cur;
+        else if (id === 'fracture_stl') sel.value = models.find(m => m !== document.getElementById('control_stl').value) || models[0] || '';
+      }
     }
-    document.getElementById('fracture_stl').value =
-      models.find(m => m !== document.getElementById('control_stl').value) || models[0] || '';
     const online = ws.filter(w => Date.now() - Date.parse(w.last_seen) < 90000);
     document.getElementById('workerline').textContent = online.length
       ? `🟢 worker ออนไลน์: ${online.map(w => w.worker_id).join(', ')}`
       : '🔴 ไม่มี worker ออนไลน์';
-  } catch (e) { document.getElementById('workerline').textContent = '⚠ โหลดข้อมูล worker ไม่ได้'; }
+  } catch (e) { /* 401 handled in api() */ }
 }
 
 async function submitJob() {
@@ -420,52 +554,59 @@ async function submitJob() {
     p.control_stl = document.getElementById('control_stl').value;
     p.fracture_stl = document.getElementById('fracture_stl').value;
   } else { p.stl = document.getElementById('control_stl').value; }
-  const r = await fetch('/api/jobs', { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: t, params: p }) });
-  document.getElementById('submitmsg').textContent = r.ok ? '✅ ส่งแล้ว' : '❌ ' + (await r.text());
+  const r = await api('/api/jobs', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: t, params: p }) });
+  document.getElementById('submitmsg').textContent = r.ok ? '✅ ส่งแล้ว' : '❌ ' + esc(await r.text());
   refresh();
 }
 
 async function refresh() {
-  const jobs = await (await fetch('/api/jobs', { headers: H })).json();
+  let jobs;
+  try { const r = await api('/api/jobs'); if (!r.ok) return; jobs = await r.json(); }
+  catch (e) { return; }
   document.getElementById('jobs').innerHTML = jobs.map(j => `<tr>
-    <td style="font-family:monospace">${j.id}</td><td>${j.type}</td>
-    <td><span class="st ${j.status}">${j.status}</span></td>
-    <td>${j.created_at.replace('T', ' ').replace('Z', '')}</td><td>${j.worker_id || '-'}</td>
-    <td><button class="small" onclick="showJob('${j.id}')">ดู</button>
-      ${j.status === 'done' ? `<a href="/api/jobs/${j.id}/results.zip?key=${KEY}"><button class="small ghost">zip</button></a>` : ''}
-      ${j.status === 'pending' ? `<button class="small ghost" onclick="cancelJob('${j.id}')">ยกเลิก</button>` : ''}
-      ${j.status !== 'running' ? `<button class="small ghost" onclick="delJob('${j.id}')">ลบ</button>` : ''}
+    <td style="font-family:monospace">${esc(j.id)}</td><td>${esc(j.type)}</td>
+    <td><span class="st ${esc(j.status)}">${esc(j.status)}</span></td>
+    <td>${esc(j.created_at.replace('T', ' ').replace('Z', ''))}</td><td>${esc(j.worker_id || '-')}</td>
+    <td><button class="small" onclick="showJob('${esc(j.id)}')">ดู</button>
+      ${j.status === 'done' ? `<a href="/api/jobs/${encodeURIComponent(j.id)}/results.zip"><button class="small ghost">zip</button></a>` : ''}
+      ${j.status === 'pending' ? `<button class="small ghost" onclick="cancelJob('${esc(j.id)}')">ยกเลิก</button>` : ''}
+      ${j.status === 'running' ? `<button class="small ghost" onclick="forceFail('${esc(j.id)}')">บังคับปิด</button>` : ''}
+      ${j.status !== 'running' ? `<button class="small ghost" onclick="delJob('${esc(j.id)}')">ลบ</button>` : ''}
     </td></tr>`).join('');
 }
 
-async function cancelJob(id) { await fetch(`/api/jobs/${id}/cancel`, { method: 'POST', headers: H }); refresh(); }
-async function delJob(id) { if (confirm('ลบ job ' + id + '?')) { await fetch(`/api/jobs/${id}`, { method: 'DELETE', headers: H }); refresh(); } }
+async function cancelJob(id) { await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); refresh(); }
+async function forceFail(id) { if (confirm('บังคับปิด job ' + id + ' ที่ค้างอยู่?')) { await api(`/api/jobs/${encodeURIComponent(id)}/force-fail`, { method: 'POST' }); refresh(); } }
+async function delJob(id) { if (confirm('ลบ job ' + id + '?')) { await api(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }); refresh(); } }
 
 async function showJob(id) {
   watching = id;
-  const j = await (await fetch(`/api/jobs/${id}`, { headers: H })).json();
-  const files = await (await fetch(`/api/jobs/${id}/files`, { headers: H })).json();
+  let j, files;
+  try {
+    j = await (await api(`/api/jobs/${encodeURIComponent(id)}`)).json();
+    files = await (await api(`/api/jobs/${encodeURIComponent(id)}/files`)).json();
+  } catch (e) { return; }
   document.getElementById('dlg_title').textContent = `${j.id} — ${j.type} [${j.status}]`;
-  let html = `<table class="metrics"><tr><td>พารามิเตอร์</td><td><code>${JSON.stringify(j.params)}</code></td></tr>`;
+  let html = `<table class="metrics"><tr><td>พารามิเตอร์</td><td><code>${esc(JSON.stringify(j.params))}</code></td></tr>`;
   if (j.metrics) for (const [k, v] of Object.entries(j.metrics))
-    html += `<tr><td>${k}</td><td>${typeof v === 'number' ? v.toPrecision(6) : v}</td></tr>`;
-  if (j.error) html += `<tr><td>error</td><td style="color:#b91c1c">${j.error}</td></tr>`;
+    html += `<tr><td>${esc(k)}</td><td>${esc(typeof v === 'number' ? v.toPrecision(6) : v)}</td></tr>`;
+  if (j.error) html += `<tr><td>error</td><td style="color:#b91c1c">${esc(j.error)}</td></tr>`;
   html += '</table>';
   const pngs = files.filter(f => f.endsWith('.png'));
-  if (pngs.length) html += '<div class="imgs">' + pngs.map(f =>
-    `<figure><a href="/api/jobs/${id}/file?path=${encodeURIComponent(f)}&key=${KEY}" target="_blank">
-     <img loading="lazy" src="/api/jobs/${id}/file?path=${encodeURIComponent(f)}&key=${KEY}"></a>
-     <figcaption>${f}</figcaption></figure>`).join('') + '</div>';
-  html += `<h2 style="margin-top:14px">Log</h2><pre id="dlg_log">${(j.log || '(ว่าง)')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>`;
+  if (pngs.length) html += '<div class="imgs">' + pngs.map(f => {
+    const u = `/api/jobs/${encodeURIComponent(id)}/file?path=${encodeURIComponent(f)}`;
+    return `<figure><a href="${u}" target="_blank"><img loading="lazy" src="${u}"></a>
+            <figcaption>${esc(f)}</figcaption></figure>`;
+  }).join('') + '</div>';
+  html += `<h2 style="margin-top:14px">Log</h2><pre>${esc(j.log || '(ว่าง)')}</pre>`;
   document.getElementById('dlg_body').innerHTML = html;
   if (!dlg.open) dlg.showModal();
-  const pre = document.getElementById('dlg_log'); pre.scrollTop = pre.scrollHeight;
+  const pre = document.querySelector('#dlg_body pre'); if (pre) pre.scrollTop = pre.scrollHeight;
 }
 dlg.addEventListener('close', () => watching = null);
 
 setInterval(() => { refresh(); loadModels(); if (watching) showJob(watching); }, 5000);
-loadModels(); refresh();
+(async () => { if (await ensureLogin(false)) { loadModels(); refresh(); } })();
 </script></body></html>
 """

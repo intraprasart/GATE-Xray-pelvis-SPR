@@ -31,7 +31,8 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 HERE = Path(__file__).resolve().parent
-CFG = json.loads((HERE / "config.json").read_text(encoding="utf-8"))
+# utf-8-sig: เผื่อไฟล์ถูกเซฟจาก Notepad เป็น UTF-8 with BOM
+CFG = json.loads((HERE / "config.json").read_text(encoding="utf-8-sig"))
 
 SERVER = CFG["server_url"].rstrip("/")
 KEY = CFG["worker_key"]
@@ -44,6 +45,7 @@ POLL_SECONDS = int(CFG.get("poll_seconds", 10))
 MAX_PHOTONS = int(CFG.get("max_photons", 100_000_000))
 MAX_JOB_SECONDS = int(CFG.get("max_job_seconds", 24 * 3600))
 KEEP_LOCAL_RUNS = bool(CFG.get("keep_local_runs", True))
+SERVER_MAX_UPLOAD_BYTES = int(CFG.get("max_upload_bytes", 2_000_000_000))
 
 HEADERS = {"X-API-Key": KEY}
 SESSION = requests.Session()
@@ -72,6 +74,19 @@ def log_local(msg: str) -> None:
             f.write(line + "\n")
     except OSError:
         pass
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """ฆ่าทั้ง process tree — สำคัญเพราะ compute จริงอยู่ในโปรเซสหลาน (_worker)"""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        try:
+            import signal
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except Exception:
+            proc.kill()
 
 
 # ----------------------------------------------------------------------
@@ -107,41 +122,94 @@ def send_log(job_id: str, text: str) -> None:
         pass  # log หายบ้างไม่เป็นไร งานหลักต้องเดินต่อ
 
 
+def _post_complete(job_id: str, data: dict, zip_path: Path | None):
+    if zip_path is not None:
+        with zip_path.open("rb") as f:
+            return SESSION.post(f"{SERVER}/api/worker/jobs/{job_id}/complete",
+                                data=data, files={"file": (zip_path.name, f, "application/zip")},
+                                timeout=1800)
+    return SESSION.post(f"{SERVER}/api/worker/jobs/{job_id}/complete",
+                        data=data, timeout=60)
+
+
 def complete(job_id: str, status: str, metrics: dict | None,
-             error: str, zip_path: Path | None) -> None:
-    data = {"status": status, "metrics": json.dumps(metrics or {}), "error": error[:2000]}
+             error: str, zip_path: Path | None) -> bool:
+    """รายงานผลกลับ server. คืน True เมื่ออัปโหลดไฟล์ผลสำเร็จ.
+
+    ยุทธศาสตร์: ถ้ามีไฟล์แต่ใหญ่เกิน/อัปไม่ขึ้น → ไม่ retry payload เดิมซ้ำ ๆ
+    แต่ fallback ไปรายงานสถานะแบบไม่มีไฟล์ เพื่อให้ job ถึงสถานะสุดท้ายเสมอ
+    (ไม่ค้าง running) พร้อมโน้ตว่าไฟล์ผลยังอยู่ที่เครื่อง worker.
+    """
+    base = {"status": status, "metrics": json.dumps(metrics or {}), "error": error[:2000]}
+    have_file = zip_path is not None and zip_path.exists()
+    too_big = have_file and zip_path.stat().st_size > SERVER_MAX_UPLOAD_BYTES
+
+    if have_file and not too_big:
+        for attempt in range(1, 4):
+            try:
+                r = _post_complete(job_id, base, zip_path)
+                if r.status_code < 400:
+                    return True
+                if r.status_code == 429 or r.status_code >= 500:
+                    log_local(f"complete {r.status_code} (attempt {attempt}) — retry")
+                    time.sleep(10 * attempt)
+                    continue
+                log_local(f"server ปฏิเสธการอัปโหลด ({r.status_code}) — fallback ไม่มีไฟล์")
+                break  # 4xx อื่น ๆ: อย่า retry payload เดิม
+            except requests.RequestException as e:
+                log_local(f"upload attempt {attempt} failed: {e}")
+                time.sleep(15 * attempt)
+
+    # fallback: รายงานสถานะแบบไม่มีไฟล์ ให้ job ถึงสถานะสุดท้ายเสมอ
+    note = error
+    if have_file:
+        reason = "ไฟล์ใหญ่เกินขีดจำกัด server" if too_big else "อัปโหลดผลไม่สำเร็จ"
+        note = (f"{error} | {reason}; ผลยังอยู่ที่ {zip_path}").strip(" |")
+    fb = {"status": status, "metrics": json.dumps(metrics or {}), "error": note[:2000]}
     for attempt in range(1, 4):
         try:
-            if zip_path is not None and zip_path.exists():
-                with zip_path.open("rb") as f:
-                    r = SESSION.post(f"{SERVER}/api/worker/jobs/{job_id}/complete",
-                                     data=data, files={"file": (zip_path.name, f, "application/zip")},
-                                     timeout=1800)
-            else:
-                r = SESSION.post(f"{SERVER}/api/worker/jobs/{job_id}/complete",
-                                 data=data, timeout=60)
-            r.raise_for_status()
-            return
+            r = _post_complete(job_id, fb, None)
+            if r.status_code < 400:
+                if have_file:
+                    log_local(f"รายงานสถานะ {status} แล้ว (ไม่มีไฟล์) — ผลอยู่ที่ {zip_path}")
+                return False
         except requests.RequestException as e:
-            log_local(f"upload attempt {attempt} failed: {e}")
-            time.sleep(15 * attempt)
-    log_local(f"ERROR: ส่งผล job {job_id} ไม่สำเร็จหลัง retry — ผลยังอยู่ที่ {zip_path}")
+            log_local(f"complete(no-file) attempt {attempt} failed: {e}")
+        time.sleep(10 * attempt)
+    log_local(f"ERROR: รายงานผล job {job_id} ไม่สำเร็จเลย — ผลอยู่ที่ {zip_path}")
+    return False
 
 
 # ----------------------------------------------------------------------
 # แปลง job spec → คำสั่ง CLI (มี whitelist กันคำสั่งแปลกปลอม)
 # ----------------------------------------------------------------------
 
-def resolve_stl(name: str) -> Path:
+def _safe_segment(name: str, what: str) -> str:
+    """อนุญาตเฉพาะชื่อชั้นเดียว ไม่มี / \\ หรือ .. (กัน path traversal)"""
+    name = str(name)
     if not name or any(c in name for c in "/\\") or ".." in name:
-        raise ValueError(f"ชื่อ STL ไม่ถูกต้อง: {name!r}")
-    p = MODELS_DIR / name
+        raise ValueError(f"{what} ไม่ถูกต้อง: {name!r}")
+    return name
+
+
+def resolve_stl(name: str) -> Path:
+    p = MODELS_DIR / _safe_segment(name, "ชื่อ STL")
     if not p.is_file():
         raise ValueError(f"ไม่พบโมเดล {name!r} ใน {MODELS_DIR}")
     return p
 
 
-def cli_args(params: dict, stl: Path, out_dir: Path) -> list[str]:
+def resolve_job_subdir(job_name: str, sub_name: str) -> Path:
+    """โฟลเดอร์ผลรันเดิมบนเครื่องนี้ — ต้องอยู่ใน JOBS_DIR เท่านั้น"""
+    job = _safe_segment(job_name, "control_job/fracture_job")
+    sub = _safe_segment(sub_name or "run", "control_sub/fracture_sub")
+    d = (JOBS_DIR / job / sub).resolve()
+    if not d.is_relative_to(JOBS_DIR.resolve()):
+        raise ValueError(f"path ออกนอก JOBS_DIR: {d}")
+    return d
+
+
+def cli_args(params: dict, stl: Path, out_dir: Path, allow_no_phsp: bool = True) -> list[str]:
     args = [PYTHON, "-u", "-m", "gate_pelvis.cli", "run",
             "--stl", str(stl), "--out", str(out_dir), "--clean"]
     for key, (lo, hi) in INT_PARAMS.items():
@@ -150,20 +218,34 @@ def cli_args(params: dict, stl: Path, out_dir: Path) -> list[str]:
     for key, (lo, hi) in FLOAT_PARAMS.items():
         if key in params:
             args += [f"--{key}", str(max(lo, min(hi, float(params[key]))))]
-    if params.get("no_phsp"):
+    # no_phsp ตัด phase-space ทิ้ง → ไม่มี SPR.mhd; ใช้ได้เฉพาะ run เดี่ยวเท่านั้น
+    # (run_pair ต้องมี SPR.mhd ไปทำ compare)
+    if allow_no_phsp and params.get("no_phsp"):
         args.append("--no_phsp")
     return args
 
 
-def run_cmd(args: list[str], job_id: str, label: str) -> None:
-    """รัน subprocess, stream stdout ไป server เป็นช่วง ๆ"""
+def run_cmd(args: list[str], job_id: str, label: str, deadline: float) -> None:
+    """รัน subprocess, stream stdout ไป server. deadline = time.monotonic() ที่ต้องจบก่อน"""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"{label}: เกินเวลารวมของงานก่อนเริ่ม")
     send_log(job_id, f"\n===== {label} =====\n$ {' '.join(args)}\n")
     env = dict(os.environ, PYTHONIOENCODING="utf-8",
                PYTHONPATH=str(REPO) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    kwargs = {}
+    if os.name != "nt":
+        kwargs["start_new_session"] = True     # ให้ฆ่าทั้งกลุ่มได้บน POSIX
     proc = subprocess.Popen(args, cwd=str(REPO), env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, encoding="utf-8", errors="replace", bufsize=1)
-    killer = threading.Timer(MAX_JOB_SECONDS, proc.kill)
+                            text=True, encoding="utf-8", errors="replace", bufsize=1, **kwargs)
+    timed_out = {"v": False}
+
+    def _on_timeout():
+        timed_out["v"] = True
+        _kill_tree(proc)
+
+    killer = threading.Timer(remaining, _on_timeout)
     killer.start()
     buf, last_flush = [], time.monotonic()
     try:
@@ -177,6 +259,8 @@ def run_cmd(args: list[str], job_id: str, label: str) -> None:
     finally:
         killer.cancel()
     send_log(job_id, "".join(buf))
+    if timed_out["v"]:
+        raise TimeoutError(f"{label}: เกินเวลา {MAX_JOB_SECONDS}s — ถูกยกเลิกและฆ่าโปรเซสทั้งกลุ่ม")
     if code != 0:
         raise RuntimeError(f"{label} ล้มเหลว (exit code {code})")
 
@@ -185,8 +269,10 @@ def run_cmd(args: list[str], job_id: str, label: str) -> None:
 # เก็บผล + zip
 # ----------------------------------------------------------------------
 
-def collect_zip(job_dir: Path, zip_path: Path, manifest: dict) -> int:
-    n = 0
+def collect_zip(job_dir: Path, zip_path: Path, manifest: dict) -> tuple[int, int]:
+    """zip เฉพาะไฟล์ผลวิเคราะห์/ภาพ. คืน (จำนวนไฟล์, ขนาด zip). หยุดถ้ารวมใหญ่เกิน server."""
+    n, skipped_big = 0, 0
+    budget = SERVER_MAX_UPLOAD_BYTES
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in sorted(job_dir.rglob("*")):
             if not p.is_file() or p == zip_path:
@@ -194,11 +280,13 @@ def collect_zip(job_dir: Path, zip_path: Path, manifest: dict) -> int:
             if p.suffix.lower() not in RESULT_EXTS:
                 continue
             if p.stat().st_size > MAX_RESULT_FILE_BYTES:
+                skipped_big += 1
                 continue
             zf.write(p, p.relative_to(job_dir).as_posix())
             n += 1
+        manifest = dict(manifest, files_included=n, files_skipped_large=skipped_big)
         zf.writestr("job_manifest.json", json.dumps(manifest, indent=2, ensure_ascii=False))
-    return n
+    return n, zip_path.stat().st_size
 
 
 def read_summary_csv(path: Path) -> dict:
@@ -222,39 +310,44 @@ def read_summary_csv(path: Path) -> dict:
 
 def handle_job(job: dict) -> None:
     job_id, jtype, params = job["id"], job["type"], job.get("params", {})
-    job_dir = JOBS_DIR / job_id
+    job_dir = JOBS_DIR / _safe_segment(job_id, "job id")
     job_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.monotonic()
+    deadline = t0 + MAX_JOB_SECONDS      # เพดานเวลารวมของทั้ง job (ไม่ใช่ต่อ subprocess)
     metrics: dict = {}
     send_log(job_id, f"worker {WORKER_ID} รับงาน {job_id} ({jtype})\n"
                      f"params: {json.dumps(params, ensure_ascii=False)}\n")
 
     if jtype == "run":
         stl = resolve_stl(params.get("stl", ""))
-        run_cmd(cli_args(params, stl, job_dir / "run"), job_id, f"run {stl.name}")
+        run_cmd(cli_args(params, stl, job_dir / "run"), job_id, f"run {stl.name}", deadline)
 
     elif jtype == "run_pair":
+        if params.get("no_phsp"):
+            send_log(job_id, "หมายเหตุ: run_pair ต้องใช้ phase-space (SPR) — ไม่สน no_phsp\n")
         c_stl = resolve_stl(params.get("control_stl", ""))
         f_stl = resolve_stl(params.get("fracture_stl", ""))
-        run_cmd(cli_args(params, c_stl, job_dir / "control"), job_id, f"control: {c_stl.name}")
-        run_cmd(cli_args(params, f_stl, job_dir / "fracture"), job_id, f"fracture: {f_stl.name}")
+        run_cmd(cli_args(params, c_stl, job_dir / "control", allow_no_phsp=False),
+                job_id, f"control: {c_stl.name}", deadline)
+        run_cmd(cli_args(params, f_stl, job_dir / "fracture", allow_no_phsp=False),
+                job_id, f"fracture: {f_stl.name}", deadline)
         run_cmd([PYTHON, "-u", "-m", "gate_pelvis.cli", "compare",
                  "--control", str(job_dir / "control"),
                  "--fracture", str(job_dir / "fracture"),
                  "--out", str(job_dir / "roi_analysis")],
-                job_id, "compare control vs fracture")
+                job_id, "compare control vs fracture", deadline)
         metrics.update(read_summary_csv(job_dir / "roi_analysis" / "summary.csv"))
 
     elif jtype == "compare":
-        c_dir = JOBS_DIR / str(params.get("control_job", "")) / str(params.get("control_sub", "run"))
-        f_dir = JOBS_DIR / str(params.get("fracture_job", "")) / str(params.get("fracture_sub", "run"))
+        c_dir = resolve_job_subdir(params.get("control_job", ""), params.get("control_sub", "run"))
+        f_dir = resolve_job_subdir(params.get("fracture_job", ""), params.get("fracture_sub", "run"))
         for d in (c_dir, f_dir):
             if not (d / "object" / "SPR.mhd").exists():
                 raise RuntimeError(f"ไม่พบผลรันเดิมที่ {d} บนเครื่อง worker นี้")
         run_cmd([PYTHON, "-u", "-m", "gate_pelvis.cli", "compare",
                  "--control", str(c_dir), "--fracture", str(f_dir),
                  "--out", str(job_dir / "roi_analysis")],
-                job_id, "compare (จากผลรันเดิม)")
+                job_id, "compare (จากผลรันเดิม)", deadline)
         metrics.update(read_summary_csv(job_dir / "roi_analysis" / "summary.csv"))
     else:
         raise RuntimeError(f"ไม่รู้จักประเภทงาน {jtype!r}")
@@ -265,16 +358,15 @@ def handle_job(job: dict) -> None:
                 "worker": WORKER_ID, "duration_seconds": duration,
                 "finished_at": datetime.now(timezone.utc).isoformat()}
     zip_path = job_dir / "results.zip"
-    n = collect_zip(job_dir, zip_path, manifest)
-    send_log(job_id, f"\nเสร็จใน {duration}s — ส่งผล {n} ไฟล์ "
-                     f"({zip_path.stat().st_size / 1e6:.1f} MB) กลับ server\n")
-    complete(job_id, "done", metrics, "", zip_path)
-    if not KEEP_LOCAL_RUNS:
+    n, zsize = collect_zip(job_dir, zip_path, manifest)
+    send_log(job_id, f"\nเสร็จใน {duration}s — ส่งผล {n} ไฟล์ ({zsize / 1e6:.1f} MB) กลับ server\n")
+    uploaded = complete(job_id, "done", metrics, "", zip_path)
+    if not KEEP_LOCAL_RUNS and uploaded:
         shutil.rmtree(job_dir, ignore_errors=True)
 
 
 def main() -> None:
-    log_local(f"SPR worker '{WORKER_ID}' เริ่มทำงาน → {SERVER}")
+    log_local(f"SPR worker '{WORKER_ID}' เริ่มทำงาน -> {SERVER}")
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
     last_register = 0.0
     while True:
