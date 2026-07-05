@@ -37,4 +37,8 @@ remote/server/.env
 # ---- macOS ----
 .DS_Store
 
+# ---- โฟลเดอร์สำรองโมเดล (local เท่านั้น ไม่ commit — ใหญ่และซ้ำ) ----
+backup_model/
+models_replaced_backup/
+
 # NOTE: models/*.stl ARE tracked on purpose (original 3D inputs).
