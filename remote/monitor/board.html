@@ -199,18 +199,23 @@ async function tick(){
   $('k_failed').textContent = hb ? hb.failed : '–';
 
   // ---- server / queue ----
+  // monitor cache ข้อมูลล่าสุดไว้ → บลิปสั้น ๆ ไม่ทำให้จอกระพริบ/ข้อมูลหาย
   const sv = st.server||{};
   const sban = $('ban_server');
-  if(!sv.ok){
-    $('c_server').innerHTML = '<span class="dot warn"></span> server ?';
-    sban.className='banner warn show'; sban.textContent='⚠ '+esc(sv.error||'ติดต่อ server ไม่ได้')+' — แสดงเฉพาะสถานะ local';
-    $('f_server').textContent='';
-    renderQueue([]); renderWorkers([]); renderRun(null);
-    $('f_update').textContent='อัปเดตล่าสุด: '+new Date().toLocaleTimeString('th-TH');
-    return;
+  const age = sv.age_sec;                       // วิ ตั้งแต่ดึง server สำเร็จครั้งล่าสุด
+  const everOk = age !== null && age !== undefined;
+  if(sv.ok){
+    $('c_server').innerHTML = '<span class="dot on"></span> server ออนไลน์';
+    sban.className='banner';
+  } else if(everOk){                            // เคยเชื่อมได้ แต่ตอนนี้ยังไม่ทันอัปเดต
+    $('c_server').innerHTML = '<span class="dot warn"></span> server ช้า ('+Math.round(age)+'s)';
+    sban.className='banner warn show';
+    sban.textContent='⚠ server ตอบช้า/หลุดชั่วคราว (ล่าสุด '+Math.round(age)+' วินาทีที่แล้ว) — แสดงข้อมูลค้างไว้';
+  } else {                                       // ยังไม่เคยเชื่อมได้เลย
+    $('c_server').innerHTML = '<span class="dot off"></span> server ?';
+    sban.className='banner warn show';
+    sban.textContent='⚠ '+esc(sv.last_error||'ติดต่อ server ไม่ได้')+' — แสดงเฉพาะสถานะ local';
   }
-  $('c_server').innerHTML = '<span class="dot on"></span> server ออนไลน์';
-  sban.className='banner';
   $('f_server').textContent = sv.server_url||'';
 
   const workers = sv.workers||[];

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,6 +31,9 @@ BOARD_HTML = (HERE / "board.html").read_text(encoding="utf-8")
 PORT = int(os.environ.get("SPR_MONITOR_PORT", "8787"))
 HEARTBEAT_FILE = WORKER_DIR / "worker.heartbeat"
 HEARTBEAT_STALE_SEC = 45          # heartbeat เก่ากว่านี้ = worker น่าจะตาย
+SERVER_POLL_SEC = 3               # เธรดเดียวดึงคิวจาก server ทุก N วิ (browser อ่านจาก cache)
+SERVER_FRESH_SEC = 15             # ถ้าดึงสำเร็จล่าสุดภายในเวลานี้ ถือว่า server ยังออนไลน์
+SERVER_TIMEOUT = 8                # timeout ต่อ request ไป server
 
 
 def _load_worker_config() -> dict:
@@ -71,15 +75,20 @@ def _read_heartbeat() -> dict | None:
     return hb
 
 
-def _server_state() -> dict:
-    """ดึงคิว + worker จาก job server. คืน error field ถ้าติดต่อไม่ได้."""
+def _fetch_server_state() -> dict:
+    """ดึงคิว + worker จาก job server. คืน error field ถ้าติดต่อไม่ได้.
+
+    เรียกจากเธรด poller เดียวเท่านั้น → ไม่มีการใช้ requests.Session ข้ามเธรด
+    (ซึ่งไม่ปลอดภัยและเป็นเหตุให้ค้าง/timeout เวลา browser poll ทับกัน)
+    """
     if not SERVER_URL or not ADMIN_KEY:
         return {"ok": False, "error": "ยังไม่ตั้ง server_url หรือ admin key"}
     try:
-        jobs = _SESSION.get(f"{SERVER_URL}/api/jobs", params={"limit": 40}, timeout=12).json()
-        workers = _SESSION.get(f"{SERVER_URL}/api/models", timeout=12).json()
+        jobs = _SESSION.get(f"{SERVER_URL}/api/jobs", params={"limit": 40},
+                            timeout=SERVER_TIMEOUT).json()
+        workers = _SESSION.get(f"{SERVER_URL}/api/models", timeout=SERVER_TIMEOUT).json()
     except requests.RequestException as e:
-        return {"ok": False, "error": f"ติดต่อ server ไม่ได้: {e}"}
+        return {"ok": False, "error": f"ติดต่อ server ไม่ได้: {type(e).__name__}"}
     except ValueError:
         return {"ok": False, "error": "server ตอบไม่ใช่ JSON (คีย์ผิด?)"}
 
@@ -87,7 +96,8 @@ def _server_state() -> dict:
     running_detail = None
     if running:
         try:
-            d = _SESSION.get(f"{SERVER_URL}/api/jobs/{running['id']}", timeout=12).json()
+            d = _SESSION.get(f"{SERVER_URL}/api/jobs/{running['id']}",
+                             timeout=SERVER_TIMEOUT).json()
             log = d.get("log", "") or ""
             running_detail = {**running, "log_tail": log[-4000:]}
         except (requests.RequestException, ValueError):
@@ -100,11 +110,41 @@ def _server_state() -> dict:
             "running": running_detail, "counts": counts, "server_url": SERVER_URL}
 
 
+# cache ที่เธรด poller เดียวเขียน, ทุก request อ่าน — ตัด internet ออกจาก browser
+_CACHE = {"data": None, "last_ok": None, "last_try": None, "error": "กำลังเชื่อมต่อ server…"}
+_CACHE_LOCK = threading.Lock()
+
+
+def _poller() -> None:
+    while True:
+        s = _fetch_server_state()
+        now = time.time()
+        with _CACHE_LOCK:
+            _CACHE["last_try"] = now
+            if s.get("ok"):
+                _CACHE["data"] = s          # เก็บชุดล่าสุดที่สำเร็จไว้เสมอ
+                _CACHE["last_ok"] = now
+                _CACHE["error"] = None
+            else:
+                _CACHE["error"] = s.get("error")   # ไม่ลบ data เดิม → board ไม่กระพริบ
+        time.sleep(SERVER_POLL_SEC)
+
+
 def build_state() -> dict:
+    with _CACHE_LOCK:
+        c = dict(_CACHE)
+    now = time.time()
+    age = (now - c["last_ok"]) if c["last_ok"] else None
+    server = dict(c["data"]) if c["data"] else {"jobs": [], "workers": [], "counts": {}}
+    # "ออนไลน์" = ดึงสำเร็จภายใน SERVER_FRESH_SEC (บลิปสั้น ๆ ไม่ทำให้หลุด)
+    server["ok"] = age is not None and age < SERVER_FRESH_SEC
+    server["age_sec"] = round(age, 1) if age is not None else None
+    server["last_error"] = c["error"]
+    server.setdefault("server_url", SERVER_URL)
     return {
         "now": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "local_worker": _read_heartbeat(),
-        "server": _server_state(),
+        "server": server,
     }
 
 
@@ -138,6 +178,7 @@ def main() -> None:
         print("คำเตือน: หา admin key ไม่พบ (~/.spr_admin_key) — จะดึงคิวจาก server ไม่ได้")
     url = f"http://localhost:{PORT}"
     print(f"SPR Monitor: {url}  (server: {SERVER_URL or '-'})")
+    threading.Thread(target=_poller, daemon=True).start()   # ดึง server ในเธรดเดียว
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     if os.environ.get("SPR_MONITOR_NOOPEN") != "1":   # run_monitor.bat เปิดเบราว์เซอร์เองครั้งเดียว
         try:
