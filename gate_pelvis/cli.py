@@ -22,7 +22,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 from .config import SimConfig
 from .pipeline import run_simulation
-from .analysis import compare_runs, ROI
+from .analysis import compare_runs, aggregate_seeds, ROI
 
 
 def _add_config_args(p: argparse.ArgumentParser) -> None:
@@ -30,7 +30,7 @@ def _add_config_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--stl", required=True, help="Path to STL mesh (mm)")
     p.add_argument("--out", default="poc_radiograph_out", help="Output directory")
     p.add_argument("--clean", action="store_true", help="Delete output dir first")
-    for name in ("photons", "threads", "pix", "n_procs"):
+    for name in ("photons", "threads", "pix", "n_procs", "random_seed"):
         p.add_argument(f"--{name}", type=int, default=getattr(defaults, name))
     p.add_argument("--mode", choices=("single", "balanced", "max"), default=defaults.mode,
                    help="parallelism: single=1 proc, balanced=cpu-2, max=all cpu "
@@ -69,6 +69,13 @@ def main(argv=None) -> int:
     cmp_p.add_argument("--roi", nargs=4, type=int, metavar=("X0", "Y0", "W", "H"),
                        help="Explicit ROI; omit to auto-detect")
 
+    agg_p = sub.add_parser("aggregate-seeds",
+                           help="Combine N seed runs into mean/std/significance maps")
+    agg_p.add_argument("--root", required=True,
+                       help="job dir containing seed_0/, seed_1/, ... each with control/ fracture/")
+    agg_p.add_argument("--n", type=int, required=True, help="number of seeds")
+    agg_p.add_argument("--out", default="seed_analysis")
+
     a = parser.parse_args(argv)
 
     if a.cmd == "run":
@@ -84,6 +91,15 @@ def main(argv=None) -> int:
         res.save(a.out)
         print("Summary:")
         for k, v in res.summary.items():
+            print(f"  {k}: {v}")
+    elif a.cmd == "aggregate-seeds":
+        from pathlib import Path
+        root = Path(a.root)
+        pairs = [(root / f"seed_{r}" / "control", root / f"seed_{r}" / "fracture")
+                 for r in range(a.n)]
+        summary = aggregate_seeds(pairs, a.out)
+        print("Multi-seed summary:")
+        for k, v in summary.items():
             print(f"  {k}: {v}")
     return 0
 

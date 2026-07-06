@@ -473,6 +473,29 @@ def handle_job(job: dict) -> None:
                 job_id, "compare control vs fracture", deadline)
         metrics.update(read_summary_csv(job_dir / "roi_analysis" / "summary.csv"))
 
+    elif jtype == "run_seeds":
+        # รัน control+fracture N รอบ ด้วย base seed อิสระ → mean/std/significance
+        c_stl = resolve_stl(params.get("control_stl", ""))
+        f_stl = resolve_stl(params.get("fracture_stl", ""))
+        n_seeds = max(2, min(30, int(params.get("n_seeds", 5))))
+        base, stride = 1234567, 1000003     # stride > จำนวน shard เสมอ → seed ไม่ชนกัน
+        send_log(job_id, f"multi-seed: {n_seeds} seeds (control+fracture ต่อ seed, "
+                         f"ใช้ common-random-numbers ในแต่ละ seed เพื่อลด variance)\n")
+        for r in range(n_seeds):
+            seed = base + r * stride
+            seed_extra = ["--random_seed", str(seed)]
+            run_cmd(cli_args(params, c_stl, job_dir / f"seed_{r}" / "control",
+                             allow_no_phsp=False) + seed_extra,
+                    job_id, f"seed {r + 1}/{n_seeds}: control", deadline)
+            run_cmd(cli_args(params, f_stl, job_dir / f"seed_{r}" / "fracture",
+                             allow_no_phsp=False) + seed_extra,
+                    job_id, f"seed {r + 1}/{n_seeds}: fracture", deadline)
+        run_cmd([PYTHON, "-u", "-m", "gate_pelvis.cli", "aggregate-seeds",
+                 "--root", str(job_dir), "--n", str(n_seeds),
+                 "--out", str(job_dir / "seed_analysis")],
+                job_id, "รวมผล N seed → significance", deadline)
+        metrics.update(read_summary_csv(job_dir / "seed_analysis" / "summary.csv"))
+
     elif jtype == "compare":
         c_dir = resolve_job_subdir(params.get("control_job", ""), params.get("control_sub", "run"))
         f_dir = resolve_job_subdir(params.get("fracture_job", ""), params.get("fracture_sub", "run"))

@@ -35,7 +35,19 @@
 |---|---|---|
 | `run` | `stl`, `photons`, `energy_keV`, `pix`, `mode`/`n_procs`, … | รัน simulation โมเดลเดียว (flat + object + SPR) |
 | `run_pair` | `control_stl`, `fracture_stl` + ค่าเดียวกับ run | รัน control + fracture แล้ว compare อัตโนมัติ → dSPR / local-STD / entropy |
+| `run_seeds` | `control_stl`, `fracture_stl`, `n_seeds` (2–30) + ค่าเดียวกับ run | รัน control+fracture **N รอบ** ด้วย seed อิสระ → **mean/std/significance(t) map + สรุป t/p ต่อ metric** (สำหรับวิเคราะห์นัยสำคัญ) |
 | `compare` | `control_job`, `fracture_job` | เปรียบเทียบผลของ job เก่า 2 ตัวที่ยังอยู่บนเครื่อง worker |
+
+### multi-seed (`run_seeds`) — วัดนัยสำคัญ
+
+Monte Carlo run เดียวให้ 1 realization → บอกไม่ได้ว่าสัญญาณ fracture จริงหรือ noise
+`run_seeds` รัน pipeline ซ้ำ N รอบ (base seed ต่างกัน; ในแต่ละรอบ control กับ fracture
+ใช้ seed เดียวกัน = common-random-numbers ช่วยลด variance ของผลต่าง) แล้วรวมเป็น:
+- **significance map ต่อพิกเซล** — `t = mean / (std/√N)` ของ dSPR/dSTD/dEntropy
+- **สรุป ROI** — mean ± SD, t-statistic, p-value ต่อ metric
+
+> ต่างจาก run mode (single/balanced/max) ที่แตกโฟตอนของ**การรันเดียว** — `run_seeds`
+> ทำหลาย realization เพื่อประเมิน variance. แนะนำ 5–10 seed × โฟตอนปานกลาง (max mode)
 
 ### โหมดการรัน — ใช้ CPU/RAM เต็มเครื่อง
 

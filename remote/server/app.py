@@ -166,7 +166,7 @@ async def logout():
 # Admin API — ส่ง job / ดูสถานะ / เอาผล
 # ----------------------------------------------------------------------
 
-VALID_TYPES = {"run", "run_pair", "compare"}
+VALID_TYPES = {"run", "run_pair", "compare", "run_seeds"}
 
 
 @app.post("/api/jobs", dependencies=[Depends(require_admin)])
@@ -655,9 +655,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <div class="grid">
       <div class="field"><label for="jtype">ประเภทงาน</label>
         <select id="jtype"><option value="run_pair">run_pair (control vs fracture)</option>
-        <option value="run">run (โมเดลเดียว)</option></select></div>
+        <option value="run">run (โมเดลเดียว)</option>
+        <option value="run_seeds">run_seeds (multi-seed + significance)</option></select></div>
       <div class="field"><label for="control_stl">Control STL</label><select id="control_stl"></select></div>
       <div class="field" id="fr_wrap"><label for="fracture_stl">Fracture STL</label><select id="fracture_stl"></select></div>
+      <div class="field" id="ns_wrap" style="display:none"><label for="n_seeds">จำนวน seed</label><input id="n_seeds" type="number" value="5" min="2" max="30"></div>
       <div class="field"><label for="photons">Photons</label><input id="photons" type="number" value="1000000"></div>
       <div class="field"><label for="energy">Energy (keV)</label><input id="energy" type="number" value="80"></div>
       <div class="field"><label for="pix">Pixels</label><input id="pix" type="number" value="512"></div>
@@ -768,8 +770,11 @@ async function ensureLogin(force) {
   }
 }
 
-document.getElementById('jtype').onchange = e =>
-  document.getElementById('fr_wrap').style.display = e.target.value === 'run_pair' ? '' : 'none';
+document.getElementById('jtype').onchange = e => {
+  const needsFrac = e.target.value === 'run_pair' || e.target.value === 'run_seeds';
+  document.getElementById('fr_wrap').style.display = needsFrac ? '' : 'none';
+  document.getElementById('ns_wrap').style.display = e.target.value === 'run_seeds' ? '' : 'none';
+};
 
 async function loadModels() {
   try {
@@ -812,9 +817,10 @@ async function submitJob() {
     pix: +document.getElementById('pix').value,
     mode: document.getElementById('mode').value,
   };
-  if (t === 'run_pair') {
+  if (t === 'run_pair' || t === 'run_seeds') {
     p.control_stl = document.getElementById('control_stl').value;
     p.fracture_stl = document.getElementById('fracture_stl').value;
+    if (t === 'run_seeds') p.n_seeds = +document.getElementById('n_seeds').value;
   } else { p.stl = document.getElementById('control_stl').value; }
   if (document.getElementById('pv_apply').checked) {   // แนบตำแหน่ง source 3D + ลำแสง + เลื่อนวัตถุ จาก Preview
     const v = pvVals();
