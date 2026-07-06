@@ -367,6 +367,13 @@ async def claim_job(request: Request):
     with _lock:
         _db.execute("UPDATE workers SET last_seen=? WHERE worker_id=?", (_now(), worker_id))
         _requeue_stale_running()
+        # worker เดียวรันได้ทีละงาน — พอมันขอ claim ใหม่ งาน running เดิมของมันถือว่าถูกทิ้ง
+        # (เช่นถูก restart กลางคัน) → ปิดเป็น failed กันค้าง 'running' ถาวร
+        _db.execute(
+            "UPDATE jobs SET status='failed', finished_at=?, "
+            "error='worker เริ่มงานใหม่ — งานเดิมถูกทิ้ง (เช่น restart กลางคัน)' "
+            "WHERE status='running' AND worker_id=?",
+            (_now(), worker_id))
         row = _db.execute(
             "SELECT * FROM jobs WHERE status='pending' ORDER BY created_at LIMIT 1").fetchone()
         if row is None:
