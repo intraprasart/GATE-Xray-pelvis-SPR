@@ -105,6 +105,12 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool,
         pelvis.material = cfg.object_material
         pelvis.translation = [0.0, 0.0, 0.0]
         pelvis.file_name = stl_abs
+        # สำคัญ: opengate ตั้ง origin_at_cog=True เป็นค่าเริ่มต้น → มันจัดกลาง mesh ด้วย
+        # center-of-gravity ให้เองก่อน ถ้าเราใส่ translation จัดกลาง bbox ทับอีกจะกลายเป็น
+        # จัดกลางสองครั้ง (COG ≠ bbox center) วัตถุเลยเลื่อน ~47mm — ปิดมันเพื่อให้การจัด
+        # กลางด้วย bbox ของเรา (ตรงกับ Preview) เป็นตัวเดียว
+        if hasattr(pelvis, "origin_at_cog"):
+            pelvis.origin_at_cog = False
 
         # การวางใน GATE: world_p = R @ local_p + T
         # ต้องการ: จัดกลาง (local_p + t_center) → หมุนของผู้ใช้ → หมุนเข้า beam frame
