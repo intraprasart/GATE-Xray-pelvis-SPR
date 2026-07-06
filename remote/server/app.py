@@ -687,6 +687,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="field"><label for="pv_sz">Source Z (มม.)</label><input id="pv_sz" type="number" value="-800"></div>
       <div class="field"><label for="pv_odd">ระยะวัตถุ→ฉากรับ ODD (มม.)</label><input id="pv_odd" type="number" value="400"></div>
       <div class="field"><label for="pv_field">ขนาดลำแสง ⌀ (มม., 0=เต็มฟิล์ม)</label><input id="pv_field" type="number" value="0"></div>
+      <div class="field"><label for="pv_odx">เลื่อนวัตถุ X (มม., ขวา+)</label><input id="pv_odx" type="number" value="0" step="5"></div>
+      <div class="field"><label for="pv_ody">เลื่อนวัตถุ Y (มม., ลง+)</label><input id="pv_ody" type="number" value="0" step="5"></div>
     </div>
     <div id="pv_info" style="font-family:var(--font-mono);font-size:12px;color:var(--fg-soft);margin:2px 0 10px"></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
@@ -814,10 +816,11 @@ async function submitJob() {
     p.control_stl = document.getElementById('control_stl').value;
     p.fracture_stl = document.getElementById('fracture_stl').value;
   } else { p.stl = document.getElementById('control_stl').value; }
-  if (document.getElementById('pv_apply').checked) {   // แนบตำแหน่ง source 3D + ลำแสงจาก Preview
+  if (document.getElementById('pv_apply').checked) {   // แนบตำแหน่ง source 3D + ลำแสง + เลื่อนวัตถุ จาก Preview
     const v = pvVals();
     p.src_x = v.sx; p.src_y = v.sy; p.src_z = v.sz;
     p.odd = v.odd; p.field_mm = v.field;
+    p.obj_dx = v.odx; p.obj_dy = v.ody;
   }
   btn.disabled = true;
   const html0 = btn.innerHTML;
@@ -891,16 +894,18 @@ dlg.addEventListener('close', () => watching = null);
 // ---------------- Preview ตำแหน่ง (เรขาคณิต, ไม่ใช่ Monte Carlo) ----------------
 const PV = { pts: null, name: null };
 const FILM_MM = 400;                       // ขนาดฟิล์มดีฟอลต์ (film_xy) สำหรับวาดฉากรับ
-const PV_IDS = ['pv_sx','pv_sy','pv_sz','pv_odd','pv_field'];
+const PV_IDS = ['pv_sx','pv_sy','pv_sz','pv_odd','pv_field','pv_odx','pv_ody'];
 
 function pvVals() {
   const g = id => +document.getElementById(id).value;
   return { sx: g('pv_sx'), sy: g('pv_sy'), sz: g('pv_sz'),
-           odd: Math.max(50, g('pv_odd')), field: Math.max(0, g('pv_field')) };
+           odd: Math.max(50, g('pv_odd')), field: Math.max(0, g('pv_field')),
+           odx: g('pv_odx'), ody: g('pv_ody') };
 }
 function pvReset() {
   const set = (id,v)=>document.getElementById(id).value=v;
   set('pv_sx',0); set('pv_sy',0); set('pv_sz',-800); set('pv_odd',400); set('pv_field',0);
+  set('pv_odx',0); set('pv_ody',0);
   pvDraw();
 }
 async function pvLoadMesh(name) {
@@ -922,12 +927,13 @@ const V3 = {
   norm:a=>{const n=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/n,a[1]/n,a[2]/n];},
 };
 // projection แต่ละมุมมอง: world[x,y,z] -> screen[u,v] (v ชี้ลงบน canvas)
+// ใช้ y-ลง ให้ตรงกับภาพผลจริง (radiograph): +x=ขวา, +y=ลง เหมือนภาพที่ยิงออกมา
 const PROJ = {
   plan: p => [p[0], p[2]],          // มองบน: X แนวนอน, Z แนวตั้ง (source z<0 อยู่บน)
-  front:p => [p[0], -p[1]],         // มองตามลำแสง: X, Y(ขึ้น)
-  side: p => [p[2], -p[1]],         // มองข้าง: Z, Y(ขึ้น)
+  front:p => [p[0], p[1]],          // มองตามลำแสง = ภาพผล: X(ขวา), Y(ลง)
+  side: p => [p[2], p[1]],          // มองข้าง: Z, Y(ลง)
   iso:  p => { const c=0.8660254, s=0.5;
-               return [(p[0]-p[2])*c, (p[0]+p[2])*s - p[1]]; },
+               return [(p[0]-p[2])*c, (p[0]+p[2])*s + p[1]]; },
 };
 
 function pvScene() {
@@ -952,7 +958,8 @@ function pvView(cid, projKey) {
   ctx.clearRect(0,0,W,H);
   const proj = PROJ[projKey];
   const sc = pvScene();
-  const obj = PV.pts || [];
+  // เลื่อนวัตถุขนานระนาบฉากรับ (ตรงกับ engine: translation += [obj_dx, obj_dy, 0])
+  const obj = (PV.pts || []).map(p => [p[0] + sc.v.odx, p[1] + sc.v.ody, p[2]]);
   const world = [...obj, sc.S, sc.Dc, ...sc.det, ...sc.fld];
   const P = world.map(proj);
   let mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;

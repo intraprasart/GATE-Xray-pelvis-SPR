@@ -121,12 +121,16 @@ def build_simulation(cfg: SimConfig, out_dir: Path, with_object: bool,
         if not np.allclose(R_total, np.eye(3)):
             pelvis.rotation = R_total
 
+        base = np.zeros(3)
         if cfg.center_mesh:
             t = _center_translation_from_stl(Path(cfg.stl))
             if t is not None:
-                t_rot = R_total @ np.asarray(t, dtype=np.float64)
-                pelvis.translation = [t_rot[0] * mm, t_rot[1] * mm, t_rot[2] * mm]
-                print(f"Centering mesh (beam frame): translation = {pelvis.translation}")
+                base = R_total @ np.asarray(t, dtype=np.float64)
+        # เลื่อนวัตถุขนานระนาบฉากรับ (beam-frame x-y) เพื่อจัดตำแหน่งละเอียด
+        base = base + np.array([float(cfg.obj_dx), float(cfg.obj_dy), 0.0])
+        if cfg.center_mesh or cfg.obj_dx or cfg.obj_dy:
+            pelvis.translation = [base[0] * mm, base[1] * mm, base[2] * mm]
+            print(f"Object placement (beam frame): translation = {pelvis.translation}")
 
     # Physics
     sim.physics_manager.physics_list_name = "G4EmLivermorePhysics"

@@ -50,6 +50,9 @@ class SimConfig:
     src_y: float | None = None
     src_z: float | None = None
     field_mm: float = 0.0                 # เส้นผ่านศูนย์กลางลำแสงที่ระนาบฉากรับ; <=0 = เต็มฟิล์ม
+    # เลื่อนวัตถุขนานระนาบฉากรับ (มม.) เพื่อจัดตำแหน่งละเอียด — x=แนวนอน, y=แนวตั้งในภาพผล
+    obj_dx: float = 0.0
+    obj_dy: float = 0.0
 
     # --- Mesh placement ---
     center_mesh: bool = True              # auto-center STL bbox at origin (needs trimesh)

@@ -37,7 +37,7 @@ def _add_config_args(p: argparse.ArgumentParser) -> None:
                         "(RAM-capped; --n_procs overrides)")
     for name in ("sod", "odd", "film_xy", "film_thickness", "energy_keV",
                  "rot_x", "rot_y", "rot_z", "primary_theta_deg", "primary_dE_keV",
-                 "field_mm"):
+                 "field_mm", "obj_dx", "obj_dy"):
         p.add_argument(f"--{name}", type=float, default=getattr(defaults, name))
     for name in ("src_x", "src_y", "src_z"):     # ตำแหน่ง source 3D (default: 0,0,-sod)
         p.add_argument(f"--{name}", type=float, default=None)
