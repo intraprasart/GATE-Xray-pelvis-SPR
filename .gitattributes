@@ -1,0 +1,18 @@
+# Force binary handling — never apply line-ending (CRLF/LF) conversion.
+# core.autocrlf=true on this machine would otherwise risk corrupting binaries.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.ttf   binary
+*.otf   binary
+*.stl   binary
+*.raw   binary
+*.zraw  binary
+*.npy   binary
+*.npz   binary
+*.mha   binary
+*.zip   binary
+*.gz    binary
