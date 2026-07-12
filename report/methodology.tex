@@ -1,0 +1,413 @@
+\documentclass[14pt]{extarticle}
+\usepackage{fontspec}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.0cm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{fancyvrb}
+\usepackage[table]{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage{hyperref}
+
+% ---- Cool theme palette (calm teal / slate — not "hot") ----
+\definecolor{theme}{HTML}{2b6a77}    % primary teal-slate
+\definecolor{themeD}{HTML}{1f4e58}   % darker teal
+\definecolor{ink}{HTML}{232d33}      % near-black slate
+\definecolor{ok}{HTML}{3f8161}       % muted green (done)
+\definecolor{cardbg}{HTML}{f3f6f7}   % very light cool gray
+\definecolor{softgray}{HTML}{eef1f2}
+\definecolor{rowtint}{HTML}{e8eef0}
+
+\hypersetup{colorlinks=true, linkcolor=theme, urlcolor=theme}
+
+% ---- Fonts ----
+\setmainfont{THSarabunNew.ttf}[
+  Path=./fonts/, BoldFont=THSarabunNew Bold.ttf,
+  ItalicFont=THSarabunNew Italic.ttf, BoldItalicFont=THSarabunNew BoldItalic.ttf]
+\setmonofont{cour.ttf}[Path=./fonts/, BoldFont=courbd.ttf, Scale=0.80]
+\XeTeXlinebreaklocale "th"
+\XeTeXlinebreakskip = 0pt plus 0.1pt
+
+\titleformat{\section}{\Large\bfseries\color{theme}}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\large\bfseries\color{ink}}{\thesubsection}{0.5em}{}
+\setlist{itemsep=1pt, topsep=2pt}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small\color{ink} SPR Fracture Detection — Experimental Checklist}
+\fancyhead[R]{\small\color{ink}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{theme!45}\leaders\hrule height \headrulewidth\hfill}}
+
+\newcommand{\todo}{\textcolor{theme}{$\square$}}
+\newcommand{\done}{\textcolor{ok}{$\boxtimes$}}
+% \code — literal mono (underscores etc. need no escaping)
+\newcommand{\code}[1]{{\ttfamily\detokenize{#1}}}
+
+% Verbatim run-command style
+\DefineVerbatimEnvironment{run}{Verbatim}{frame=single, framerule=0.4pt,
+  rulecolor=\color{theme!40}, fontsize=\small, formatcom=\color{ink}, xleftmargin=6pt}
+
+% Experiment card
+\newtcolorbox{card}[1]{colback=cardbg, colframe=theme!55, boxrule=0.8pt, arc=2pt,
+  left=8pt, right=8pt, top=5pt, bottom=6pt, title=#1, coltitle=white,
+  fonttitle=\bfseries, colbacktitle=theme}
+
+% sub-run table helper column types
+\newcolumntype{K}{>{\centering\arraybackslash}p{0.7em}}
+
+\begin{document}
+
+% ===================== TITLE =====================
+\begin{center}
+{\LARGE\bfseries\color{theme} ระเบียบวิธีการทดลองเพิ่มเติม (Experimental Checklist)}\\[4pt]
+{\Large การตรวจจับรอยแตกกระดูกเชิงกรานด้วยลายเซ็นการกระเจิงรังสีเอกซ์ (SPR)}\\[6pt]
+{\small แผนการทดลองสำหรับผู้ร่วมวิจัย --- ใช้เฉพาะโมเดลที่มีอยู่ปัจจุบัน โดยปรับพารามิเตอร์การรัน}\\
+{\small ระบบจำลอง OpenGATE 10 / Geant4 \quad$\bullet$\quad \today}
+\end{center}
+\vspace{2pt}{\color{theme!45}\hrule}\vspace{8pt}
+
+% ===================== SECTION 0 =====================
+\section{บทนำและวิธีใช้เอกสาร}
+เอกสารนี้เป็น \textbf{check list ของการทดลอง} เพื่อทดสอบสมมติฐานหลัก---``รอยแตกกระดูกทิ้งลายเซ็นที่
+ตรวจจับได้ในอัตราส่วนการกระเจิงต่อรังสีปฐมภูมิ (SPR)''---ให้\textbf{ครอบคลุมและแม่นยำยิ่งขึ้น}
+ภายใต้เงื่อนไข\textbf{ใช้เพียงโมเดลที่มีอยู่} (รอยแตก 4 ขนาด + matched control) แล้ว\textbf{ปรับพารามิเตอร์การรัน}
+
+\noindent\textbf{วิธีใช้:} แต่ละการทดลองใหญ่ (CL-x) มี \emph{สมมติฐาน, ทฤษฎี, ผลที่ทำนาย} แล้วแตกเป็น
+\textbf{รายการย่อย (CL-x.n) หนึ่งแถวต่อหนึ่งการรัน} พร้อมพารามิเตอร์ที่ต้องตั้ง --- ผู้ร่วมวิจัยรัน
+ตามลำดับความสำคัญ (\S\ref{sec:priority}) ติ๊ก \todo\,$\to$\,\done\ ทีละแถว และบันทึกผลลงตาราง (\S\ref{sec:log})
+
+\noindent\textbf{สัญลักษณ์:} \done~= ทำแล้ว \quad \todo~= รอรัน
+
+\begin{tcolorbox}[colback=softgray, colframe=theme!25, boxrule=0.5pt, arc=2pt]
+\textbf{หลักการร่วมของทุกการทดลอง (ห้ามละ):} (1)~\textbf{matched control} (ต่างจาก fracture เฉพาะร่อง)
+ตัด confound ของ mesh; (2)~\textbf{multi-seed} (control+fracture ใช้ seed เดียวกันต่อ realization =
+common random numbers) วัดนัยสำคัญ; (3)~\textbf{a-priori ROI} ที่ตำแหน่งร่อง กำหนดก่อนดูผล เทียบ background ---
+ห้ามเลือก ROI จากจุดสัญญาณแรงสุด (cherry-picking)
+\end{tcolorbox}
+
+% ===================== SECTION 1: THEORY =====================
+\section{ทฤษฎีพื้นฐาน}
+
+\subsection{อัตราส่วนการกระเจิง SPR และกลไกของรอยแตก}
+\[ \mathrm{SPR}(x,y)=\frac{I_{\text{scatter}}(x,y)}{I_{\text{primary}}(x,y)} \]
+รอยแตก = ช่องอากาศบางในกระดูก; Beer--Lambert $I=I_0 e^{-\int \mu\,dl}$ โดย
+$\mu_{\text{air}}\!\ll\!\mu_{\text{bone}}$ $\Rightarrow$ ตามรังสีที่ผ่านร่อง primary เพิ่ม $\Rightarrow$
+$\Delta\mathrm{SPR}=\mathrm{SPR}_{\text{frac}}-\mathrm{SPR}_{\text{ctrl}}<0$ ที่ร่อง (ตรงกับ CL-0)
+
+\subsection{การพึ่งพาพลังงาน}
+$\mu_{\text{bone}}(E)=\underbrace{\tau}_{\text{photoelec}}+\underbrace{\sigma_{\text{C}}}_{\text{Compton}}+\dots$,
+$\tau\propto Z^{\sim4}/E^{\sim3}$ (ตกเร็วเมื่อ $E$ สูง) $\Rightarrow$ contrast ร่องแรงที่ $E$ ต่ำ,
+scatter fraction (SPR ฐาน) เพิ่มที่ $E$ สูง $\Rightarrow$ มีพลังงานเหมาะสมสำหรับ CNR (CL-3)
+
+\subsection{การกระเจิงกับเรขาคณิต}
+scatter $\propto$ ปริมาตรฉาย $\Rightarrow$ \textbf{collimation} ลด scatter บดบัง (CL-4);
+\textbf{air-gap/ODD} ให้ scatter ที่ฟุ้งพลาดฉากรับ (CL-5);
+\textbf{มุมลำแสง} --- สัญญาณ $\propto$ เส้นทางอากาศที่ฉายผ่านร่อง สูงสุดเมื่อลำแสงเลียบระนาบร่อง (CL-6)
+
+\subsection{กรอบสถิติ}
+\[ t=\frac{\overline{\Delta\mathrm{SPR}}}{s/\sqrt{N}},\quad \mathrm{df}=N-1;\qquad
+   \text{s.e.}\propto\tfrac{1}{\sqrt{N_{\text{seeds}}}},\quad
+   \text{MC noise}\propto\tfrac{1}{\sqrt{N_{\text{photons}}}} \]
+เพิ่ม seed/photons $\Rightarrow$ $|t|$ โตถ้าสัญญาณจริง (CL-1); control-vs-control/permutation คุม false-positive (CL-2)
+
+% ===================== SECTION 2: MASTER TABLE =====================
+\section{ตารางสรุป (Master Checklist)}
+\renewcommand{\arraystretch}{1.2}
+\small
+\begin{longtable}{c l l c c}
+\rowcolor{theme}\color{white}\textbf{ID} & \color{white}\textbf{การทดลอง} &
+  \color{white}\textbf{ทดสอบอะไร} & \color{white}\textbf{\#runs} & \color{white}\textbf{สถานะ} \\
+\midrule
+\endhead
+CL-0 & Baseline detectability sweep & สัญญาณจริง \& โตตามขนาด & 4 & \done \\
+\rowcolor{rowtint}
+CL-1 & Statistical convergence & ยืนยัน 0.306 \& คลี่คลาย plateau & 4 & \todo \\
+CL-2 & Null / false-positive & อัตราผลบวกลวงต่ำ (validity) & 3 & \todo \\
+\rowcolor{rowtint}
+CL-3 & Energy dependence & กลไกฟิสิกส์ \& พลังงานเหมาะสม & 5 & \todo \\
+CL-4 & Collimation field-size & collimation ช่วยจริง \& ค่าเหมาะสม & 6 & \todo \\
+\rowcolor{rowtint}
+CL-5 & Air-gap / ODD & scatter rejection เชิงเรขาคณิต & 5 & \todo \\
+CL-6 & Beam-angle / orientation & \textbf{ทดสอบเชิงสาเหตุ}ทิศทาง & 7 & \todo \\
+\rowcolor{rowtint}
+CL-7 & ROI \& spatial profile & matched filter \& อธิบาย plateau & 3 & \todo \\
+CL-8 & Detector pixel-size & partial-volume \& ความละเอียด & 4 & \todo \\
+\bottomrule
+\end{longtable}
+\normalsize
+
+% ===================== SECTION 3: CARDS =====================
+\section{รายละเอียดการทดลอง (พร้อมรายการย่อย)}
+
+% ---------- CL-0 ----------
+\begin{card}{CL-0 \quad Baseline matched-control sweep \hfill \done\ ทำแล้ว}
+\textbf{สมมติฐาน:} สัญญาณ $\Delta\mathrm{SPR}$ ตรวจพบได้อย่างมีนัยสำคัญและโตตามขนาดร่อง \quad
+\textbf{Baseline:} \code{energy_keV=80, photons=2000000, pix=256, field_mm=40, n_seeds=8, sod=800, odd=400}
+\end{card}
+\vspace{-1pt}\renewcommand{\arraystretch}{1.15}\small
+\begin{center}
+\begin{tabular}{cc c c c c}
+\rowcolor{softgray}\ & ขนาดร่อง & $\Delta$SPR & $|t|$ & $p$ & bg \\
+\done & 0.306 & $-3.3\times10^{-5}$ & 3.12 & 0.017 & null \\
+\done & 0.43  & $-3.4\times10^{-5}$ & 3.66 & 0.008 & null \\
+\done & 0.54  & $-4.9\times10^{-5}$ & 4.84 & 0.002 & null \\
+\done & 1.0   & $-4.2\times10^{-5}$ & 4.32 & 0.004 & null \\
+\end{tabular}
+\end{center}
+\normalsize
+\textbf{ค้นพบ:} ตรวจพบครบ ($p<0.02$), เครื่องหมายลบตามฟิสิกส์, background null, อิ่มตัวที่ $\ge0.54$mm,
+ตัวชี้วัดพื้นผิว (variance/entropy) บอด (สัญญาณเป็น mean-shift) $\to$ นำสู่ CL-1 \& CL-7
+
+\vspace{6pt}
+% ---------- CL-1 ----------
+\begin{card}{CL-1 \quad Statistical convergence \& power \hfill \todo}
+\textbf{สมมติฐาน:} เพิ่มสถิติ $\Rightarrow$ $|t|$ โตเสถียร ยืนยัน 0.306mm และชี้ขาด plateau (0.54 vs 1.0)\\
+\textbf{ทฤษฎี:} $\text{s.e.}\propto1/\sqrt{N_{\text{seeds}}}$, noise $\propto1/\sqrt{N_{\text{photons}}}$;
+$t\propto$ สัญญาณ$\times\sqrt{N}$\\
+\textbf{ทำนาย:} 0.306mm $|t|$ เกินเกณฑ์มั่นคง; plateau ชี้ขาด (ถ้า 1.0 ยังไม่เกิน 0.54 = อิ่มตัวจริง $\to$ CL-7)\\
+\textbf{ตรึงทุกแถว:} \code{field_mm=40, sod=800, odd=400}
+\smallskip\\ \textbf{รายการย่อย:}
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l l l}
+\todo & \textbf{1.1} & โมเดล 0.306 & \code{n_seeds=30, photons=2000000} \\
+\todo & \textbf{1.2} & โมเดล 0.306 & \code{n_seeds=30, photons=8000000} \\
+\todo & \textbf{1.3} & โมเดล 0.54  & \code{n_seeds=30, photons=8000000} \\
+\todo & \textbf{1.4} & โมเดล 1.0   & \code{n_seeds=30, photons=8000000} \\
+\end{tabular}
+\normalsize
+
+\vspace{6pt}
+% ---------- CL-2 ----------
+\begin{card}{CL-2 \quad Null / false-positive calibration \hfill \todo\ (ทำก่อน)}
+\textbf{สมมติฐาน:} ระเบียบวิธีไม่สร้างสัญญาณลวงเมื่อไม่มีรอยแตก\\
+\textbf{ทฤษฎี:} ต้องคุม false-positive rate ก่อนเชื่อผลบวก --- รันแบบ ``ไม่มีสัญญาณ'' ต้องได้ null\\
+\textbf{ทำนาย:} 2.1/2.3 ให้ $t\approx0,\ p>0.05$; 2.2 ตำแหน่งร่องเป็น outlier ชัด (empirical $p$)\\
+\textbf{รายการย่อย:} (2.1--2.2 = วิเคราะห์ข้อมูล CL-0 เดิม ไม่ต้องรันใหม่)
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l p{10.2cm}}
+\todo & \textbf{2.1} & \textbf{permutation-ROI} (วิเคราะห์): วาง ROI 16$\times$16 สุ่ม $\ge200$ ตำแหน่งในลำแสง (เลี่ยงร่อง) บนข้อมูล CL-0 $\to$ null distribution ของ $t$ \\
+\todo & \textbf{2.2} & \textbf{split-seed} (วิเคราะห์): แยก 8 seeds ของ control เป็น 2 กลุ่ม หาผลต่างระหว่างกลุ่ม $\to$ ต้อง null \\
+\todo & \textbf{2.3} & \textbf{control-vs-control} (รันใหม่, เลือกได้): รัน control model เป็นทั้งสองฝั่งด้วย \code{--random_seed} คนละชุด (offset ผ่าน CLI) $\to$ $\Delta$SPR ควรเป็น noise \\
+\end{tabular}
+\normalsize
+
+\vspace{6pt}
+% ---------- CL-3 ----------
+\begin{card}{CL-3 \quad Energy dependence (spectral) \hfill \todo\ (กลไกฟิสิกส์)}
+\textbf{สมมติฐาน:} ถ้าสัญญาณจากการลดทอนของกระดูกจริง $|\Delta\mathrm{SPR}|$/CNR ต้องแปรตามพลังงาน\\
+\textbf{ทฤษฎี:} $\tau\propto1/E^{\sim3}$ (contrast แรงที่ $E$ ต่ำ), scatter เพิ่มที่ $E$ สูง $\to$ มีจุดเหมาะสม\\
+\textbf{ทำนาย:} $|\Delta\mathrm{SPR}|$ ลดเมื่อ $E$ สูง, CNR อาจพีคกลาง --- ตรงฟิสิกส์ = สนับสนุนกลไกแข็งแรง\\
+\textbf{ตรึงทุกแถว:} \code{model=0.54, n_seeds=10, field_mm=40, pix=256, sod=800, odd=400}
+\smallskip\\ \textbf{รายการย่อย (กวาด \code{energy_keV}):}
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l l @{\hspace{2em}} K l l}
+\todo & \textbf{3.1} & \code{energy_keV=40}  &
+\todo & \textbf{3.4} & \code{energy_keV=100} \\
+\todo & \textbf{3.2} & \code{energy_keV=60}  &
+\todo & \textbf{3.5} & \code{energy_keV=120} \\
+\todo & \textbf{3.3} & \code{energy_keV=80}  & & & \\
+\end{tabular}
+\normalsize
+
+\vspace{6pt}
+% ---------- CL-4 ----------
+\begin{card}{CL-4 \quad Collimation field-size dependence \hfill \todo}
+\textbf{สมมติฐาน:} collimation เพิ่ม detectability จริง โดยมีขนาดสนามเหมาะสม\\
+\textbf{ทฤษฎี:} scatter $\propto$ ปริมาตรฉาย --- สนามกว้าง scatter บดบัง contrast; สนามแคบสะอาดแต่สถิติน้อย\\
+\textbf{ทำนาย:} $t$/CNR พีคที่สนามแคบ--กลาง แล้วตกเมื่อกว้าง (scatter wash)\\
+\textbf{ตรึงทุกแถว:} \code{model=0.54, energy_keV=80, n_seeds=10, pix=256, sod=800, odd=400}
+\smallskip\\ \textbf{รายการย่อย (กวาด \code{field_mm}):}
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l l @{\hspace{2em}} K l l}
+\todo & \textbf{4.1} & \code{field_mm=15} &
+\todo & \textbf{4.4} & \code{field_mm=60} \\
+\todo & \textbf{4.2} & \code{field_mm=25} &
+\todo & \textbf{4.5} & \code{field_mm=100} \\
+\todo & \textbf{4.3} & \code{field_mm=40} &
+\todo & \textbf{4.6} & \code{field_mm=0} (เต็มฟิล์ม) \\
+\end{tabular}
+\normalsize
+
+\vspace{6pt}
+% ---------- CL-5 ----------
+\begin{card}{CL-5 \quad Air-gap / object--detector distance (ODD) \hfill \todo}
+\textbf{สมมติฐาน:} เพิ่ม ODD ลด scatter ที่ถึงฉากรับ (air-gap) + เพิ่มกำลังขยายร่อง\\
+\textbf{ทฤษฎี:} scatter ฟุ้งพลาดฉากรับมากกว่า primary เมื่อ ODD มาก; $m=\mathrm{SID}/\mathrm{SOD}$ เพิ่ม\\
+\textbf{ทำนาย:} SPR ฐานลดตาม ODD (ยืนยัน air-gap); CNR อาจดีขึ้นแล้วตก (fluence loss)\\
+\textbf{ตรึงทุกแถว:} \code{model=0.54, energy_keV=80, n_seeds=10, field_mm=40, pix=256, sod=800}
+\smallskip\\ \textbf{รายการย่อย (กวาด \code{odd}):}
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l l @{\hspace{2em}} K l l}
+\todo & \textbf{5.1} & \code{odd=100} &
+\todo & \textbf{5.4} & \code{odd=700} \\
+\todo & \textbf{5.2} & \code{odd=250} &
+\todo & \textbf{5.5} & \code{odd=1200} \\
+\todo & \textbf{5.3} & \code{odd=400} & & & \\
+\end{tabular}
+\normalsize
+
+\vspace{6pt}
+% ---------- CL-6 ----------
+\begin{card}{CL-6 \quad Beam-angle / fracture-orientation \hfill \todo\ (เชิงสาเหตุแข็งแรงสุด)}
+\textbf{สมมติฐาน:} สัญญาณขึ้นกับมุมระหว่างลำแสงกับระนาบร่อง --- สูงสุดเมื่อเลียบระนาบ (tangential)\\
+\textbf{ทฤษฎี:} $\Delta(\text{primary})\propto$ เส้นทางอากาศที่ฉายผ่านร่อง = ฟังก์ชันของมุม; ตรงหลักคลินิก\\
+\textbf{ทำนาย:} $|\Delta\mathrm{SPR}|$ แปรตามมุมเป็นระบบ (พีคที่มุม tangential) = ลายนิ้วมือเชิงสาเหตุ\\
+\textbf{ตรึงทุกแถว:} \code{model=0.54, energy_keV=80, n_seeds=10, field_mm=40, sod=800, odd=400};
+ตั้ง \code{src_x=800*sin(t)}, \code{src_z=-800*cos(t)}; ใช้ \textbf{Preview} จัดร่องกลางลำแสง (\code{obj_dx/obj_dy}) ทุกมุม
+\smallskip\\ \textbf{รายการย่อย (กวาดมุม $\theta$):}
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l l l}
+\todo & \textbf{6.1} & $\theta=0^\circ$   & \code{src_x=0, src_z=-800} \\
+\todo & \textbf{6.2} & $\theta=+10^\circ$ & \code{src_x=138.9, src_z=-787.8} \\
+\todo & \textbf{6.3} & $\theta=+20^\circ$ & \code{src_x=273.6, src_z=-751.8} \\
+\todo & \textbf{6.4} & $\theta=+30^\circ$ & \code{src_x=400, src_z=-692.8} \\
+\todo & \textbf{6.5} & $\theta=-10^\circ$ & \code{src_x=-138.9, src_z=-787.8} \\
+\todo & \textbf{6.6} & $\theta=-20^\circ$ & \code{src_x=-273.6, src_z=-751.8} \\
+\todo & \textbf{6.7} & $\theta=-30^\circ$ & \code{src_x=-400, src_z=-692.8} \\
+\end{tabular}
+\normalsize
+
+\vspace{6pt}
+% ---------- CL-7 ----------
+\begin{card}{CL-7 \quad ROI scaling \& spatial profile \hfill \todo\ (อธิบาย plateau)}
+\textbf{สมมติฐาน:} plateau เกิดจาก ROI คงที่เจือจางสัญญาณของร่องกว้าง; ขนาดเชิงพื้นที่ยังโตตามจริง\\
+\textbf{ทฤษฎี:} matched filter (SNR สูงสุดเมื่อ ROI $\approx$ ขอบเขตสัญญาณ); FWHM ของแอ่งแปรตามความกว้างร่องที่ฉาย\\
+\textbf{ทำนาย:} ความลึก/สัญญาณรวมโตต่อเนื่องแม้ค่าเฉลี่ยใน ROI คงที่ = plateau เป็นผลของ ROI\\
+\textbf{รายการย่อย:} (ทั้งหมดวิเคราะห์บนข้อมูล CL-0/CL-1 ไม่ต้องรันใหม่)
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l p{10.2cm}}
+\todo & \textbf{7.1} & กวาดขนาด ROI $\in\{8,12,16,24,32\}$px บนทั้ง 4 ขนาด $\to$ $t$ vs ROI \\
+\todo & \textbf{7.2} & ROI ปรับตามความกว้างร่องที่ฉายแต่ละขนาด (matched filter) \\
+\todo & \textbf{7.3} & line profile ตัดขวางร่อง: วัดความลึกแอ่ง + FWHM เทียบ vs ขนาดร่อง 4 ขนาด \\
+\end{tabular}
+\normalsize
+
+\vspace{6pt}
+% ---------- CL-8 ----------
+\begin{card}{CL-8 \quad Detector pixel-size / resolution \hfill \todo}
+\textbf{สมมติฐาน:} มีขนาดพิกเซลเหมาะสม --- หยาบเจือจาง (partial volume), ละเอียด noise สูง\\
+\textbf{ทฤษฎี:} พิกเซลหยาบเฉลี่ยสัญญาณกับกระดูกรอบ ๆ แต่โฟตอน/พิกเซลมาก; ละเอียดแยกร่องแต่ noisy\\
+\textbf{ทำนาย:} CNR พีคที่พิกเซล$\approx$ความกว้างร่องที่ฉาย แล้วตกทั้งสองฝั่ง\\
+\textbf{ตรึงทุกแถว:} \code{model=0.54, energy_keV=80, n_seeds=10, field_mm=40, sod=800, odd=400} (\code{film_xy=400})
+\smallskip\\ \textbf{รายการย่อย (กวาด \code{pix}):}
+\end{card}
+\vspace{-1pt}\small
+\begin{tabular}{K l l l}
+\todo & \textbf{8.1} & \code{pix=128}  & (พิกเซล 3.13 มม.) \\
+\todo & \textbf{8.2} & \code{pix=256}  & (พิกเซล 1.56 มม.) \\
+\todo & \textbf{8.3} & \code{pix=512}  & (พิกเซล 0.78 มม.) \\
+\todo & \textbf{8.4} & \code{pix=1024} & (พิกเซล 0.39 มม.) \\
+\end{tabular}
+\normalsize
+
+% ===================== SECTION 4: ANALYSIS PROTOCOL =====================
+\section{โปรโตคอลการวิเคราะห์ร่วม}
+\begin{enumerate}
+  \item โหลด \code{seed_N/{control,fracture}/object/SPR.mhd} ทุก seed; คำนวณ
+        $\Delta\mathrm{SPR}_N=\mathrm{SPR}^{\text{frac}}_N-\mathrm{SPR}^{\text{ctrl}}_N$
+  \item \textbf{a-priori ROI} 16$\times$16px ที่ตำแหน่งร่อง (กลางภาพเมื่อจัด \code{obj_dx/obj_dy}), กำหนดก่อนดูผล;
+        $t=\overline{\Delta\mathrm{SPR}}/(s/\sqrt N)$, df$=N-1$
+  \item \textbf{background} ROI ขนาดเท่ากัน เลื่อน $\sim18$px --- ต้องได้ null
+  \item รายงานเสมอ: $\overline{\Delta\mathrm{SPR}}$, $t$, $p$ (two-sided), $t/p$ ของ background, โฟตอน/พิกเซล
+  \item กวาดหลายค่า $\to$ พิจารณา \textbf{multiple-comparison} (เช่น Bonferroni) ก่อนสรุปข้ามเงื่อนไข
+  \item เครื่องหมายคาดว่า $<0$ ที่ร่อง --- ค่าบวก ``มีนัยสำคัญ'' = ธงเตือน artifact/misalignment
+\end{enumerate}
+
+% ===================== SECTION 5: RUN REFERENCE =====================
+\section{อ้างอิงคำสั่งรัน}
+\subsection{คู่โมเดล (fracture / matched control)}
+\small
+\begin{tabular}{c l l}
+\rowcolor{softgray} ขนาด & \code{fracture_stl} & \code{control_stl} \\
+0.306 & \code{0.306x1000.stl}  & \code{0.306_filled_control.stl} \\
+0.43  & \code{0.43x1000.stl}   & \code{0.43x1000_filled_control.stl} \\
+0.54  & \code{0.54x1000.stl}   & \code{0.54x1000_filled_control.stl} \\
+1.0   & \code{1mmx1000.stl}    & \code{1mmx1000_filled_control.stl} \\
+\end{tabular}
+\normalsize
+
+\subsection{วิธี A --- job \code{run_seeds} ผ่านแดชบอร์ด (แนะนำ)}
+ส่ง job ชนิด \code{run_seeds} ตั้งพารามิเตอร์ตามรายการย่อยของแต่ละ CL (ที่ไม่ระบุ = default):
+\begin{run}
+type         = run_seeds
+control_stl  = 0.54x1000_filled_control.stl
+fracture_stl = 0.54x1000.stl
+n_seeds      = 10          # 2..30 (สูงสุดต่อ job = 30)
+energy_keV   = 80          # CL-3
+field_mm     = 40          # CL-4  (0 = เต็มฟิล์ม)
+odd          = 400         # CL-5
+src_x , src_z              # CL-6 (มุมลำแสง)
+pix          = 256         # CL-8
+photons      = 2000000     # CL-1
+obj_dx = -21.5 , obj_dy = -22.3
+mode         = max
+\end{run}
+ระบบรัน control+fracture ต่อ seed (seed เดียวกัน) แล้วเรียก \code{aggregate-seeds} อัตโนมัติ;
+ผลอยู่ที่ \code{runs/remote_jobs/<job_id>/seed_*/}
+
+\subsection{วิธี B --- CLI ท้องถิ่น}
+\begin{run}
+python -m gate_pelvis run --stl models/0.54x1000.stl --out OUTDIR \
+  --energy_keV 80 --field_mm 40 --odd 400 --pix 256 \
+  --photons 2000000 --obj_dx -21.5 --obj_dy -22.3 --random_seed 1234567 --mode max
+# ทำซ้ำกับ control_stl + เปลี่ยน --random_seed ต่อ seed แล้วรวม:
+python -m gate_pelvis aggregate-seeds --root ROOTDIR --n 10 --out ROOTDIR/seed_analysis
+\end{run}
+
+\subsection{ช่วงค่าที่ระบบยอมรับ}
+\small
+\code{energy_keV} 1--1000 (คลินิก 20--150) \quad \code{sod} 50--5000 \quad \code{odd} 50--2000 \quad
+\code{pix} 16--2048 \quad \code{field_mm} $\ge0$ \quad \code{src_x/y/z} $\pm5000$ \quad \code{n_seeds} 2--30
+\normalsize
+
+% ===================== SECTION 6: PRIORITY =====================
+\section{ลำดับความสำคัญที่แนะนำ}\label{sec:priority}
+\begin{enumerate}
+  \item \textbf{CL-2} (null/false-positive) --- ตรวจความถูกต้อง pipeline ก่อนเชื่อผลอื่น
+  \item \textbf{CL-1} (convergence) --- ยืนยัน 0.306mm \& ตรึง seed/photons ที่ใช้ตลอด
+  \item \textbf{CL-6} (beam angle) \& \textbf{CL-3} (energy) --- สองการทดสอบกลไก/เชิงสาเหตุที่แข็งแรงสุด
+  \item \textbf{CL-7} (ROI/profile) --- อธิบาย plateau (วิเคราะห์ข้อมูลเดิม ต้นทุนต่ำ)
+  \item \textbf{CL-4, CL-5, CL-8} --- ปรับให้เหมาะสม (collimation, air-gap, พิกเซล) เพื่อ CNR สูงสุด
+\end{enumerate}
+
+% ===================== SECTION 7: LOG TEMPLATE =====================
+\section{แบบฟอร์มบันทึกผล}\label{sec:log}
+บันทึกทุกการรันหนึ่งแถว:
+\renewcommand{\arraystretch}{1.55}
+\small
+\begin{longtable}{c c l c c c c c}
+\rowcolor{theme}\color{white}CL.n & \color{white}job\_id & \color{white}พารามิเตอร์ที่เปลี่ยน &
+  \color{white}ขนาด & \color{white}$\Delta$SPR & \color{white}$t$ & \color{white}$p$ & \color{white}bg $p$ \\
+\endhead
+\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\rowcolor{rowtint}\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\rowcolor{rowtint}\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\rowcolor{rowtint}\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\rowcolor{rowtint}\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\ &\ &\ &\ &\ &\ &\ &\ \\ \hline
+\bottomrule
+\end{longtable}
+\normalsize
+
+\vfill
+\noindent{\color{theme!45}\rule{\textwidth}{0.4pt}}\\
+{\small\color{ink} เอกสารประกอบ repository \code{GATE-Xray-pelvis-SPR}. ทุกการทดลองใช้โมเดลที่มีอยู่
+โดยปรับพารามิเตอร์การรันเท่านั้น. ผลฐาน CL-0 = \code{report/report.pdf}.}
+
+\end{document}

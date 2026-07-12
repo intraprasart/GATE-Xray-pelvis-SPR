@@ -46,3 +46,9 @@ models_replaced_backup/
 # report build artifacts
 report/pylibs/
 report/_qa_*.png
+
+# report intermediate analysis data (figures use the PNGs, not these)
+report/**/*.npy
+# worker/monitor runtime temp
+remote/worker/startup.*
+remote/monitor/mon.*
