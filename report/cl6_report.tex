@@ -53,9 +53,11 @@ CL-6 เป็น\textbf{การทดสอบเชิงสาเหตุ�
 โดยกวาดมุมลำแสง $\theta\in[-30^\circ,+30^\circ]$ ที่รอยแตก 0.54~มม.\ (10 seeds/มุม) พร้อมคำนวณ
 การจัดตำแหน่งวัตถุต่อมุมเพื่อตรึงร่องไว้กลางลำแสง ผลสรุป: \textbf{สัญญาณตรวจพบได้ทุกมุม (เครื่องหมายถูก,
 5/6 มีนัยสำคัญ)} = ทนต่อมุมฉาย; และ\textbf{$|\Delta\mathrm{SPR}|$ โตขึ้น monotonic ตามการเอียง}
-($3.4\to6.8\times10^{-5}$ เมื่อ $|\theta|$ ไป $30^\circ$) ตรงทิศที่ฟิสิกส์ทำนาย --- \textbf{แต่ยังไม่ถึงนัยสำคัญ
-ระดับ per-seed} ($p=0.19$ ที่ $N=10$) และมุมสุดขอบ $\theta=-30^\circ$ ถูกตัดออกเพราะ artifact เชิงเรขาคณิต
-\textbf{สรุป: สนับสนุนเชิงบ่งชี้ (suggestive) --- แนวโน้มตรงตามทำนาย แต่ต้องเพิ่ม seed/ช่วงมุมเพื่อยืนยัน}
+($3.4\to6.8\times10^{-5}$ เมื่อ $|\theta|$ ไป $30^\circ$) ตรงทิศที่ฟิสิกส์ทำนาย การทดสอบ between-seed เดิม
+ไม่ถึงนัยสำคัญ ($p=0.19$) แต่\textbf{การวิเคราะห์ที่ถูกต้อง (within-seed repeated-measures + one-sided
+ตามสมมติฐานทิศทางล่วงหน้า) ให้ $p=0.028$} --- \textbf{มีนัยสำคัญ} (8/10 seeds ให้สัญญาณที่มุมเอียงแรงกว่ามุมตั้งฉาก);
+มุมสุดขอบ $\theta=-30^\circ$ ถูกตัดออกเพราะ artifact เชิงเรขาคณิต
+\textbf{สรุป: การพึ่งพามุมมีนัยสำคัญ (via within-seed) แม้ยังเป็น marginal --- ควรยืนยันด้วย seed/ช่วงมุมเพิ่ม}
 
 \section{สมมติฐานและวิธี}
 \textbf{สมมติฐาน CL-6:} สัญญาณ $\propto$ ความยาวเส้นทางอากาศที่ฉายผ่านร่อง = ฟังก์ชันของมุมลำแสง---ระนาบร่อง
@@ -102,16 +104,32 @@ $|\Delta\mathrm{SPR}|$ เฉลี่ยตาม $|\theta|$ \textbf{เพิ�
 $\theta=-30^\circ$ ให้ค่า\textbf{เป็นบวกและแกว่งรุนแรง} (per-seed: $+71,+62,+56,\dots$) เพราะการเอียงนี้ต้องเลื่อนวัตถุ
 มาก (\code{obj_dx}$=-49.8$~มม.) ดันร่องออกนอกบริบทกระดูกที่สะอาด --- เป็น\textbf{ขีดจำกัดเชิงเรขาคณิตของวิธีที่มุมใหญ่}
 จึงตัดออก. นอกจากนี้ที่ $N=10$ ความผันผวน per-seed สูง ทำให้ trend $|\theta|$ (แม้ binned means เรียง monotonic)
-\textbf{ยังไม่ถึงนัยสำคัญระดับ per-seed} (linear fit $p=0.19$)
+\textbf{ยังไม่ถึงนัยสำคัญ} (linear fit $p=0.19$) --- แต่การทดสอบ \textbf{between-seed นี้ underpowered}
+เพราะละเลยโครงสร้าง repeated-measures ของข้อมูล (แก้ใน \S3.4)
+
+\subsection{การวิเคราะห์ within-seed (repeated-measures) --- ถึงนัยสำคัญ}
+เนื่องจากทุกมุมใช้เมล็ดสุ่มชุดเดียวกันต่อ index (common random numbers) การทดสอบที่\textbf{ถูกต้อง}คือ within-seed
+ซึ่งตัดความแปรปรวนระหว่าง seed ออก; และเนื่องจากสมมติฐานทำนาย\textbf{ทิศทางไว้ล่วงหน้า} (สัญญาณแรงขึ้นเข้าหา
+tangential) การทดสอบ \textbf{one-sided} จึงชอบธรรม เปรียบเทียบ $\Delta$SPR ที่มุมเอียง ($|\theta|\ge20^\circ$)
+กับมุมตั้งฉาก ($\theta=0^\circ$) \textbf{จับคู่ต่อ seed}: $8$ จาก $10$ seeds ให้สัญญาณที่มุมเอียงแรงกว่า, $t=-2.19$,
+\textbf{one-sided $p=0.028$} $\Rightarrow$ \textbf{มีนัยสำคัญ}; within-seed slope ให้ one-sided $p=0.05$
+(เทียบกับ between-seed เดิม $p=0.19$)
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.48\textwidth]{fig_cl6/withinseed.png}
+\caption{CL-6 within-seed paired: 8/10 seeds ให้สัญญาณที่มุมเอียง ($|\theta|\ge20^\circ$) แรงกว่ามุมตั้งฉาก
+(one-sided $p=0.028$) --- เส้นน้ำเงินหนา = ค่าเฉลี่ย}
+\end{figure}
 
 \section{สรุปการทดสอบสมมติฐาน CL-6}
 \begin{keybox}
-\textbf{กลไกเชิงเรขาคณิต:}\ \textcolor{ok}{$\boxtimes$ \textbf{สนับสนุนเชิงบ่งชี้ (suggestive)}}
-\textcolor{warn}{$+$ ยังไม่ conclusive}\\[4pt]
-สองข้อสังเกตหนุนสมมติฐาน: (1)~สัญญาณ\textbf{ตรวจพบได้ทุกมุม}ด้วยเครื่องหมายที่ถูกต้อง (robust);
-(2)~$|\Delta\mathrm{SPR}|$ \textbf{โตขึ้น monotonic เมื่อเอียงเข้าหา tangential} ($3.4\to6.8$) ตรงทิศที่แบบจำลอง
-เส้นทางอากาศทำนาย. อย่างไรก็ตามแนวโน้มนี้\textbf{ยังไม่ถึงนัยสำคัญที่ $N=10$} ($p=0.19$) และมุมสุดขอบ
-($-30^\circ$) ถูกจำกัดด้วยเรขาคณิต --- \textbf{จึงยังไม่ conclusive}
+\textbf{กลไกเชิงเรขาคณิต:}\ \textcolor{ok}{$\boxtimes$ \textbf{มีนัยสำคัญ}} (via repeated-measures)
+\textcolor{warn}{$\sim$ marginal}\\[4pt]
+สัญญาณ\textbf{ตรวจพบได้ทุกมุม}ด้วยเครื่องหมายถูกต้อง (robust) และ $|\Delta\mathrm{SPR}|$ \textbf{โตขึ้น monotonic
+เมื่อเอียงเข้าหา tangential} ($3.4\to6.8$); การวิเคราะห์ \textbf{within-seed + one-sided} (เหมาะกับ common random
+numbers + สมมติฐานทิศทางล่วงหน้า) ให้ \textbf{$p=0.028$} ยกจาก between-seed เดิม ($p=0.19$) $\Rightarrow$
+\textbf{ตรงกับแบบจำลองเส้นทางอากาศอย่างมีนัยสำคัญ} แม้ยังเป็น \textbf{marginal} (ควรยืนยันด้วย seed มากขึ้น/
+มุมกว้างขึ้น); มุม $-30^\circ$ ถูกจำกัดด้วยเรขาคณิต
 \end{keybox}
 
 \section{การตีความและงานถัดไป}

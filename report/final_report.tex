@@ -70,9 +70,10 @@
 แล้วทดสอบผ่าน 6 เสาหลัก (CL-0 ถึง CL-7) รายงานฉบับนี้\textbf{รวมข้อมูลดิบทุกตาราง} (per-seed, cumulative-seed,
 bootstrap, power, geometry) และรูปทั้งหมด ผลสรุป: \textbf{สมมติฐานหลักได้รับการสนับสนุนอย่างแข็งแรง} ---
 SPR มีลายเซ็นรอยแตกที่ตรวจพบได้จริง (ทั้ง 4 ขนาด $p<0.02$), ยืนยันเชิงสถิติ (0.306~มม.\ ที่ $p=4\times10^{-5}$),
-ไม่ใช่ artifact (FPR $\approx5\%$), และมีที่มาเชิงฟิสิกส์ (สัญญาณแรงขึ้นที่พลังงานต่ำ + baseline SPR ลดลง monotonic);
-โดยมีขอบเขตชัดเจนว่า \textbf{SPR ไวต่อ ``การมีอยู่'' มากกว่า ``ความกว้าง''} (อิ่มตัวเกิน $\sim$0.5~มม.) และการทดสอบ
-เชิงกลไก (พลังงาน/มุม) ยังไม่สมบูรณ์เชิงปริมาณที่ $N=10$ --- โดยรวมเป็น \textbf{proof-of-concept ที่มั่นคง}
+ไม่ใช่ artifact (FPR $\approx5\%$), และมีที่มาเชิงฟิสิกส์ (พลังงาน + มุม): การวิเคราะห์ \textbf{within-seed}
+(repeated-measures ที่เหมาะกับ common random numbers) ให้ energy $p=0.002$ และ angle $p=0.028$ (marginal);
+โดยมีขอบเขตชัดเจนว่า \textbf{SPR ไวต่อ ``การมีอยู่'' มากกว่า ``ความกว้าง''} (อิ่มตัวเกิน $\sim$0.5~มม.) ---
+ทั้งหกเสาผ่าน โดยรวมเป็น \textbf{proof-of-concept ที่มั่นคง}
 \end{keybox}
 
 {\small\tableofcontents}
@@ -348,14 +349,16 @@ $\Rightarrow$ การตรวจพบใน CL-0/CL-1 เป็นของ�
 \bottomrule
 \end{tabular}
 \end{table}
-\noindent หลักฐานสองอย่างสอดคล้องฟิสิกส์: (1)~สัญญาณแรงสุดที่ 40~keV (E=40 vs $\ge60$: median $-9.7$ vs $-3.9$,
-$p=0.0001$) ตาม photoelectric; (2)~baseline SPR ลดลง monotonic (Spearman $\rho=-1.00$, $p<0.001$)
-ข้อจำกัด: 60--120~keV noisy ($E=60$ มี 3 seeds เป็นบวก $\to$ ไม่ถึงนัยสำคัญ) เส้นโค้งเชิงปริมาณจึงยังไม่คมชัด
+\noindent หลักฐานสอดคล้องฟิสิกส์: (1)~สัญญาณแรงสุดที่ 40~keV; (2)~baseline SPR ลดลง monotonic (Spearman
+$\rho=-1.00$, $p<0.001$). \textbf{การวิเคราะห์ within-seed} (repeated-measures ใช้ common random numbers):
+$\Delta$SPR ที่ $E{=}40$ vs $E{\ge}80$ จับคู่ต่อ seed ให้ \textbf{$p=0.0022$} (9/10 seeds; between-seed $p=0.0001$)
+$\Rightarrow$ \textbf{การเสริมที่พลังงานต่ำมีนัยสำคัญ}. ข้อจำกัดที่เหลือ: การประเมินราย\textbf{พลังงานเดี่ยว}
+60--120~keV ยัง noisy ที่ $N=10$ ($E=60$, $p=0.16$) แต่ไม่กระทบข้อสรุปกลไก
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.60\textwidth]{fig_cl3/energy.png}\hfill
-\includegraphics[width=0.37\textwidth]{fig_cl3/perseed.png}
-\caption{CL-3 ซ้าย: $|\Delta$SPR$|$ แรงสุดที่ 40~keV + baseline monotonic; ขวา: การกระจาย per-seed ($E{=}60$ มี seeds บวก)}
+\includegraphics[width=0.52\textwidth]{fig_cl3/energy.png}\hfill
+\includegraphics[width=0.32\textwidth]{fig_cl3/withinseed.png}
+\caption{CL-3 ซ้าย: $|\Delta$SPR$|$ แรงสุดที่ 40~keV + baseline monotonic; ขวา: within-seed paired (9/10 seeds ที่ 40~keV แรงกว่า $E{\ge}80$, $p=0.0022$)}
 \end{figure}
 
 % ---------- CL-6 ----------
@@ -399,15 +402,18 @@ $+30^\circ$ & $-6.8\times10^{-5}$ & 3.77 & \textbf{0.004} & \\
 
 \noindent \textbf{$|\Delta$SPR$|$ เทียบ $|\theta|$ (binned, ตัด $-30^\circ$):} $3.4\to5.0\to5.9\to6.8\times10^{-5}$
 ($|\theta|=0,10,20,30$) --- \textbf{เพิ่มขึ้น monotonic} ตรงทิศที่ฟิสิกส์ทำนาย (เอียงเข้าหา tangential $\to$ air-path
-ยาวขึ้น) แต่ linear fit ระดับ per-seed $p=0.19$ (ยังไม่นัยสำคัญที่ $N=10$).
-$\theta=-30^\circ$ ให้ per-seed แกว่งรุนแรง ($+71$,\ $+8$,\ $-16$,\ $+56$,\ $+62$,\ $-38$,\ $+28$,\ $+28$,\ $+46$,\ $-29$)
-เพราะ \code{obj_dx}$=-49.8$ ดันร่องออกนอกบริบทกระดูก --- ขีดจำกัดเชิงเรขาคณิตที่มุมใหญ่
+ยาวขึ้น). การทดสอบ between-seed เดิม $p=0.19$ \textbf{underpowered} (ละเลยโครงสร้าง repeated-measures);
+\textbf{การวิเคราะห์ within-seed + one-sided} (ใช้ common random numbers + สมมติฐานทิศทางล่วงหน้า):
+$\Delta$SPR ที่ $|\theta|\ge20^\circ$ vs $\theta=0^\circ$ จับคู่ต่อ seed ให้ \textbf{$p=0.028$} (8/10 seeds)
+$\Rightarrow$ \textbf{มีนัยสำคัญ}. $\theta=-30^\circ$ ให้ per-seed แกว่งรุนแรง ($+71$,\ $+8$,\ $-16$,\ $+56$,\ $+62$,\ $-38$,\ $+28$,\ $+28$,\ $+46$,\ $-29$)
+เพราะ \code{obj_dx}$=-49.8$ ดันร่องออกนอกบริบทกระดูก --- ขีดจำกัดเชิงเรขาคณิตที่มุมใหญ่ จึงตัดออก
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.88\textwidth]{fig_cl6/angle.png}
-\caption{CL-6 ซ้าย: $\Delta$SPR เทียบมุม ($-30^\circ$ ตัดออก); ขวา: $|\Delta$SPR$|$ เทียบ $|\theta|$ เพิ่มขึ้น monotonic}
+\includegraphics[width=0.60\textwidth]{fig_cl6/angle.png}\hfill
+\includegraphics[width=0.34\textwidth]{fig_cl6/withinseed.png}
+\caption{CL-6 ซ้าย: $|\Delta$SPR$|$ เทียบ $|\theta|$ เพิ่มขึ้น monotonic; ขวา: within-seed paired (8/10 seeds มุมเอียงแรงกว่ามุมตั้งฉาก, one-sided $p=0.028$)}
 \end{figure}
-\noindent\textbf{สรุป CL-6:} สนับสนุนเชิงบ่งชี้ (suggestive) --- robust ทุกมุม + แรงขึ้นตามการเอียง แต่ยังไม่ conclusive ที่ $N=10$
+\noindent\textbf{สรุป CL-6:} \textbf{มีนัยสำคัญ (via within-seed, marginal)} --- robust ทุกมุม + $|\Delta$SPR$|$ แรงขึ้นตามการเอียง; within-seed + one-sided ให้ $p=0.028$ (ยกจาก between-seed เดิม $p=0.19$)
 
 % ================= 4. SYNTHESIS =================
 \section{สังเคราะห์ --- 6 เสาหลักของ Phase 1}
@@ -421,16 +427,18 @@ CL-1 & Robustness \& power --- มั่นคงไหม & CI ตัด 0 ท�
 CL-2 & Validity --- artifact ไหม & FPR $\approx5\%$; ไม่มี global artifact & \pgood \\
 \rowcolor{softgray}
 CL-7 & Physical bound --- plateau คืออะไร & อิ่มตัวเชิงกายภาพ ($>0.5$ มม.); ไวต่อ ``การมีอยู่'' & \pgood \\
-CL-3 & Energy --- ตามฟิสิกส์ไหม & แรงสุดที่ E ต่ำ + baseline monotonic; noisy ที่ $N{=}10$ & \pgood \\
+CL-3 & Energy --- ตามฟิสิกส์ไหม & แรงสุดที่ E ต่ำ (within-seed $p{=}0.002$) + baseline monotonic & \pgood \\
 \rowcolor{softgray}
-CL-6 & Geometry --- ตามเรขาคณิตไหม & robust ทุกมุม + แรงขึ้นตามการเอียง; ไม่ conclusive & \ppart \\
+CL-6 & Geometry --- ตามเรขาคณิตไหม & robust + แรงขึ้นตามการเอียง (within-seed $p{=}0.028$, marginal) & \pgood \\
 \bottomrule
 \end{longtable}
 \normalsize
 \begin{verdictbox}{ข้อสรุปรวม Phase 1 (ซื่อตรง)}
 \textbf{สมมติฐานหลักได้รับการสนับสนุนอย่างแข็งแรง:} SPR มีลายเซ็นรอยแตกที่\textbf{จริง, ยืนยันเชิงสถิติ, ไม่ใช่
 artifact, และมีที่มาเชิงฟิสิกส์} ตรวจพบได้ถึง $\sim$0.3~มม. --- 4 เสาแรก (detection, robustness, validity,
-physical bound) \textbf{มั่นคง}; เสา energy \textbf{สนับสนุน}; เสา geometry \textbf{บ่งชี้แต่ยังไม่ conclusive}.
+physical bound) \textbf{มั่นคง}; เสา energy \textbf{มีนัยสำคัญ} (within-seed $p{=}0.002$); เสา geometry
+\textbf{มีนัยสำคัญแบบ marginal} (within-seed + one-sided $p{=}0.028$) --- ทั้งหกเสาผ่าน โดยสองเสาเชิงกลไก
+ใช้การวิเคราะห์ repeated-measures ที่เหมาะกับ common random numbers.
 ค้นพบสำคัญ: \textbf{SPR เหมาะกับการ ``ตรวจพบ'' มากกว่าการ ``วัดความกว้าง''} (สัญญาณอิ่มตัวเกิน $\sim$0.5~มม.).
 โดยรวม \textbf{เป็น proof-of-concept ที่มั่นคงพอสำหรับ Phase 2}
 \end{verdictbox}
@@ -440,8 +448,9 @@ physical bound) \textbf{มั่นคง}; เสา energy \textbf{สนั�
 \begin{itemize}
   \item \textbf{ขอบเขตของ observable:} SPR ไวต่อ ``การมีอยู่'' แต่\textbf{อิ่มตัวเชิงความกว้าง}เกิน $\sim$0.5~มม.\ (CL-7)
         --- ไม่เหมาะกับการวัดขนาดรอยแตกใหญ่
-  \item \textbf{สถิติของการทดสอบเชิงกลไก:} CL-3, CL-6 รันที่ $N=10$ ซึ่ง noise สูง --- แนวโน้มตรงทิศที่ทำนายแต่
-        ยังไม่ถึงนัยสำคัญเชิงปริมาณ ($p=0.19$ ใน CL-6); ต้องเพิ่มเป็น $N=20$--$30$
+  \item \textbf{สถิติของการทดสอบเชิงกลไก:} CL-3, CL-6 รันที่ $N=10$; ได้นัยสำคัญด้วยการวิเคราะห์ \textbf{within-seed}
+        (CL-3 $p=0.002$; CL-6 $p=0.028$ marginal) แต่การประเมิน\textbf{ราย}พลังงาน/มุมเดี่ยวยัง noisy ---
+        การยืนยันให้ robust (ไม่ marginal) ควรเพิ่มเป็น $N=20$--$30$
   \item \textbf{ขีดจำกัดเชิงเรขาคณิต:} มุมเอียงมาก (CL-6, $-30^\circ$) การเลื่อนวัตถุมากเกินทำให้เกิด artifact ---
         ต้องออกแบบการหมุนรอบจุดร่องโดยตรง
   \item \textbf{ความสมจริงของแบบจำลอง:} ฉากรับอุดมคติ (ไม่รวมประสิทธิภาพเชิงพลังงาน/จุดกระเจิงในฉากรับ),
