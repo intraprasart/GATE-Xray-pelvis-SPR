@@ -52,3 +52,6 @@ report/**/*.npy
 # worker/monitor runtime temp
 remote/worker/startup.*
 remote/monitor/mon.*
+
+# poster build dir (locked-file workaround)
+report/build/

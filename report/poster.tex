@@ -43,7 +43,7 @@
 {\veryHuge\bfseries\color{themeD} Detecting Sub-Millimetre Bone Fractures}\\[0.4ex]
 {\Huge\bfseries\color{theme} via the X-ray Scatter-to-Primary Ratio}\\[0.6ex]
 {\Large A Monte Carlo (OpenGATE\,10 / Geant4) Feasibility Study}\\[0.5ex]
-{\large [Author Name]\quad$\bullet$\quad Baanwit Academy\quad$\bullet$\quad 2026 \quad$\bullet$\quad \textit{preliminary --- CL-3 \& CL-6 pending}}\\[0.3ex]
+{\large [Author Name]\quad$\bullet$\quad Baanwit Academy\quad$\bullet$\quad 2026 \quad$\bullet$\quad \textit{Phase 1 --- all six pillars evaluated}}\\[0.3ex]
 {\color{theme}\rule{\linewidth}{3pt}}
 \end{center}
 \vspace{0.4ex}
@@ -121,11 +121,10 @@ All four sizes detected ($p<0.02$); $\Delta\mathrm{SPR}<0$ (air gap $\to$ more p
 \end{center}
 \end{block}
 
-\begin{block}{7. Mechanism tests --- in progress}
+\begin{block}{7. Mechanism tests --- energy \& angle}
 \begin{keybox}
-\pend{CL-3 Energy dependence} (40--120\,keV): does the signal follow photoelectric/Compton physics? \quad\pend{[running]}\\[4pt]
-\pend{CL-6 Beam-angle dependence}: is the signal maximal when the beam is tangential to the fracture plane (the clinical hallmark)? \quad\pend{[running]}\\[4pt]
-{\small\color{muted} Results to be inserted in the final version; per-angle geometry pre-computed and queued.}
+\good{CL-3 Energy} (40--120\,keV): signal \textbf{strongest at low energy} (40\,keV vs higher, $p{=}0.0001$) --- photoelectric; baseline SPR \textbf{decreases monotonically} ($\rho{=}-1.00$). \good{Mechanism supported} (fine curve noisy at $N{=}10$).\\[4pt]
+\good{CL-6 Beam-angle} ($\pm30^\circ$): signal \textbf{robust across angles} (correct sign) and \textbf{strengthens with tilt} toward tangential ($|\Delta$SPR$|$: $3.4\!\to\!6.8$). \pend{Suggestive} but not conclusive at $N{=}10$.
 \end{keybox}
 \end{block}
 
@@ -133,7 +132,7 @@ All four sizes detected ($p<0.02$); $\Delta\mathrm{SPR}<0$ (air gap $\to$ more p
 \begin{itemize}
   \item The SPR carries a \good{real, validated} fracture signature detectable to $\sim$0.3\,mm.
   \item The signal is \textbf{physically bounded}: excellent for \emph{detection}, saturating for \emph{width} $>0.5$\,mm.
-  \item Energy- \& angle-dependence (pending) will complete the mechanistic proof for \textbf{Phase 1}.
+  \item Energy dependence \good{supports} the mechanism; angle dependence is \textbf{suggestive} --- both consistent with bone-attenuation physics.
 \end{itemize}
 \end{block}
 
@@ -144,7 +143,7 @@ All four sizes detected ($p<0.02$); $\Delta\mathrm{SPR}<0$ (air gap $\to$ more p
 \textbf{Detection} & \textbf{Robustness} & \textbf{Validity} & \textbf{Phys.\ bound} & \textbf{Energy} & \textbf{Geometry}\\
 {\small CL-0} & {\small CL-1} & {\small CL-2} & {\small CL-7} & {\small CL-3} & {\small CL-6}\\[2pt]
 \textcolor{ok}{\Large\checkmark} & \textcolor{ok}{\Large\checkmark} & \textcolor{ok}{\Large\checkmark} & \textcolor{ok}{\Large\checkmark} &
-\textcolor{warn}{\small running} & \textcolor{warn}{\small running}\\
+\textcolor{ok}{\Large\checkmark} & \textcolor{warn}{\Large$\sim$}\\
 \end{tabular}
 \end{block}
 
@@ -154,7 +153,7 @@ All four sizes detected ($p<0.02$); $\Delta\mathrm{SPR}<0$ (air gap $\to$ more p
 \vspace{0.3ex}
 \begin{center}
 {\color{theme}\rule{\linewidth}{1.5pt}}\\[0.3ex]
-{\small\color{muted} Repository: \texttt{intraprasart/GATE-Xray-pelvis-SPR} \quad$\bullet$\quad Method pillars: detection $\cdot$ robustness $\cdot$ validity $\cdot$ physical bound $\cdot$ (energy) $\cdot$ (geometry) \quad$\bullet$\quad contact: admin@baanwit.academy}
+{\small\color{muted} Repository: \texttt{intraprasart/GATE-Xray-pelvis-SPR} \quad$\bullet$\quad Method pillars: detection $\cdot$ robustness $\cdot$ validity $\cdot$ physical bound $\cdot$ energy $\cdot$ geometry \quad$\bullet$\quad contact: admin@baanwit.academy}
 \end{center}
 
 \end{frame}
