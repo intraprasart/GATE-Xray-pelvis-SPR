@@ -1,7 +1,7 @@
 \documentclass[14pt]{extarticle}
 \usepackage{fontspec}
 \usepackage{geometry}
-\geometry{a4paper, margin=2.1cm}
+\geometry{a4paper, margin=2.0cm}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{array}
@@ -28,12 +28,13 @@
 \setmainfont{THSarabunNew.ttf}[
   Path=./fonts/, BoldFont=THSarabunNew Bold.ttf,
   ItalicFont=THSarabunNew Italic.ttf, BoldItalicFont=THSarabunNew BoldItalic.ttf]
-\setmonofont{cour.ttf}[Path=./fonts/, BoldFont=courbd.ttf, Scale=0.82]
+\setmonofont{cour.ttf}[Path=./fonts/, BoldFont=courbd.ttf, Scale=0.80]
 \XeTeXlinebreaklocale "th"
 \XeTeXlinebreakskip = 0pt plus 0.1pt
 
 \titleformat{\section}{\Large\bfseries\color{theme}}{\thesection.}{0.5em}{}
 \titleformat{\subsection}{\large\bfseries\color{ink}}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}{\bfseries\color{themeD}}{\thesubsubsection}{0.5em}{}
 \setlist{itemsep=1pt, topsep=2pt}
 \pagestyle{fancy}\fancyhf{}
 \fancyhead[L]{\small\color{ink} SPR Fracture Detection --- Phase 1 Final Report}
@@ -45,6 +46,8 @@
 \newcommand{\ppart}{\textcolor{warn}{$\sim$}}
 \newtcolorbox{keybox}{colback=cardbg, colframe=theme!55, boxrule=0.8pt, arc=2pt, left=8pt, right=8pt, top=5pt, bottom=6pt}
 \newtcolorbox{verdictbox}[1]{colback=cardbg, colframe=theme, boxrule=1pt, arc=2pt, left=8pt, right=8pt, top=4pt, bottom=5pt, title=#1, coltitle=white, colbacktitle=theme, fonttitle=\bfseries\small}
+\definecolor{hdr}{HTML}{2b6a77}
+\newcommand{\thd}[1]{\cellcolor{hdr}\color{white}\textbf{#1}}
 
 \begin{document}
 
@@ -54,175 +57,370 @@
 {\LARGE\bfseries\color{themeD} การตรวจจับรอยแตกกระดูกเชิงกรานระดับต่ำกว่ามิลลิเมตร\\[3pt]
 ด้วยลายเซ็นการกระเจิงรังสีเอกซ์ (Scatter-to-Primary Ratio)}\\[8pt]
 {\Large\color{theme} รายงานฉบับสมบูรณ์ --- Phase 1 (Feasibility Study)}\\[6pt]
-{\large การจำลอง Monte Carlo ด้วย OpenGATE 10 / Geant4}\\[4pt]
+{\large การจำลอง Monte Carlo ด้วย OpenGATE 10 / Geant4 --- ฉบับรวมข้อมูลครบ}\\[4pt]
 {\small Baanwit Academy \quad$\bullet$\quad repository: \code{intraprasart/GATE-Xray-pelvis-SPR} \quad$\bullet$\quad \today}\\[6pt]
 {\color{theme}\rule{\linewidth}{2.5pt}}
 \end{center}
 \vspace{6pt}
 
-% ================= ABSTRACT =================
 \begin{keybox}
 \textbf{\color{themeD} บทคัดย่อ.}\ โครงการนี้ทดสอบสมมติฐานว่ารอยแตกกระดูกทิ้ง ``ลายเซ็น'' ที่ตรวจจับได้ใน
-อัตราส่วนการกระเจิงต่อรังสีปฐมภูมิ (SPR) ของภาพรังสีเอกซ์ ผ่านการจำลอง Monte Carlo โดยพัฒนาระเบียบวิธี
-ที่แยกสัญญาณของรอยแตกออกจากปัจจัยรบกวนอย่างเข้มงวด (\textit{matched control} + \textit{multi-seed
-significance} + a-priori ROI) แล้วทดสอบผ่าน 6 เสาหลัก ผลสรุป: \textbf{สมมติฐานหลักได้รับการสนับสนุน
-อย่างแข็งแรง} --- SPR มีลายเซ็นรอยแตกที่ \textbf{ตรวจพบได้จริง} (ทั้ง 4 ขนาด, $p<0.02$),
-\textbf{ยืนยันเชิงสถิติ} (รอยแตกเล็กสุด 0.306~มม.\ ยืนยันที่ $p=4\times10^{-5}$), \textbf{ไม่ใช่ artifact}
-(false-positive rate $\approx5\%$), และ\textbf{มีที่มาเชิงฟิสิกส์} (สัญญาณแรงขึ้นที่พลังงานต่ำ + baseline SPR
-ลดลง monotonic ตามพลังงาน) อย่างไรก็ตามพบขอบเขตที่ชัดเจน: \textbf{SPR ไวต่อ ``การมีอยู่'' ของรอยแตก
-มากกว่า ``ความกว้าง''} (สัญญาณอิ่มตัวเกิน $\sim$0.5~มม.) และการทดสอบเชิงกลไก (พลังงาน/มุม) ยัง
-ไม่สมบูรณ์เชิงปริมาณที่จำนวน seed ปัจจุบัน โดยรวมเป็น \textbf{proof-of-concept ที่มั่นคง}สำหรับการพัฒนาต่อ
+อัตราส่วนการกระเจิงต่อรังสีปฐมภูมิ (SPR) ผ่านการจำลอง Monte Carlo โดยพัฒนาระเบียบวิธีที่แยกสัญญาณของรอยแตก
+ออกจากปัจจัยรบกวนอย่างเข้มงวด (\textit{matched control} + \textit{multi-seed significance} + a-priori ROI)
+แล้วทดสอบผ่าน 6 เสาหลัก (CL-0 ถึง CL-7) รายงานฉบับนี้\textbf{รวมข้อมูลดิบทุกตาราง} (per-seed, cumulative-seed,
+bootstrap, power, geometry) และรูปทั้งหมด ผลสรุป: \textbf{สมมติฐานหลักได้รับการสนับสนุนอย่างแข็งแรง} ---
+SPR มีลายเซ็นรอยแตกที่ตรวจพบได้จริง (ทั้ง 4 ขนาด $p<0.02$), ยืนยันเชิงสถิติ (0.306~มม.\ ที่ $p=4\times10^{-5}$),
+ไม่ใช่ artifact (FPR $\approx5\%$), และมีที่มาเชิงฟิสิกส์ (สัญญาณแรงขึ้นที่พลังงานต่ำ + baseline SPR ลดลง monotonic);
+โดยมีขอบเขตชัดเจนว่า \textbf{SPR ไวต่อ ``การมีอยู่'' มากกว่า ``ความกว้าง''} (อิ่มตัวเกิน $\sim$0.5~มม.) และการทดสอบ
+เชิงกลไก (พลังงาน/มุม) ยังไม่สมบูรณ์เชิงปริมาณที่ $N=10$ --- โดยรวมเป็น \textbf{proof-of-concept ที่มั่นคง}
 \end{keybox}
 
 {\small\tableofcontents}
-\vspace{4pt}
+\clearpage
 
 % ================= 1. INTRO =================
 \section{บทนำและวัตถุประสงค์}
-รอยแตกกระดูกแบบเส้นผม (hairline / sub-millimetre fracture) มักตรวจพบได้ยากในภาพรังสีทั่วไป เนื่องจากความ
-แตกต่างของการดูดกลืนรังสี (attenuation) ที่รอยแตกสร้างขึ้นมีค่าน้อยมาก \textbf{สมมติฐานหลัก}ของโครงการคือ
-รอยแตกทำให้เกิดการเปลี่ยนแปลงเฉพาะจุดขององค์ประกอบการกระเจิงรังสี ซึ่งวัดผ่าน
+รอยแตกกระดูกแบบเส้นผม (hairline / sub-millimetre fracture) มักตรวจพบได้ยากในภาพรังสีทั่วไป เนื่องจากความแตกต่าง
+ของการดูดกลืนรังสี (attenuation) ที่รอยแตกสร้างขึ้นมีค่าน้อยมาก \textbf{สมมติฐานหลัก}คือรอยแตกทำให้เกิดการเปลี่ยนแปลง
+เฉพาะจุดขององค์ประกอบการกระเจิงรังสี ซึ่งวัดผ่านอัตราส่วน
 \[ \mathrm{SPR}(x,y)=\frac{I_{\text{scatter}}(x,y)}{I_{\text{primary}}(x,y)} \]
-และอาจให้ ``ลายเซ็น'' ที่ตรวจจับได้ดีกว่าการดูดกลืนโดยตรง
-
-\noindent\textbf{วัตถุประสงค์ Phase 1:} ทดสอบว่าลายเซ็น SPR จากรอยแตก (1)~ตรวจพบได้, (2)~ยืนยันเชิงสถิติ,
-(3)~ไม่ใช่ artifact ของระเบียบวิธี, (4)~มีที่มาเชิงฟิสิกส์ และ (5)~ระบุขอบเขตความสามารถ --- ผ่านการจำลอง
-Monte Carlo โดยใช้เพียงโมเดลที่มีอยู่ (รอยแตก 4 ขนาด) แล้วปรับพารามิเตอร์การรัน
+และอาจให้ ``ลายเซ็น'' ที่ตรวจจับได้ดีกว่าการดูดกลืนโดยตรง \textbf{วัตถุประสงค์ Phase 1:} ทดสอบว่าลายเซ็น SPR
+จากรอยแตก (1)~ตรวจพบได้, (2)~ยืนยันเชิงสถิติ, (3)~ไม่ใช่ artifact, (4)~มีที่มาเชิงฟิสิกส์, (5)~ระบุขอบเขต ---
+โดยใช้เพียงโมเดลที่มีอยู่ (รอยแตก 4 ขนาด) แล้วปรับพารามิเตอร์การรัน การทดสอบจัดเป็น 6 เสา (checklist CL-0…CL-7)
 
 % ================= 2. METHODS =================
 \section{ระเบียบวิธี}
 
 \subsection{การจำลองด้วย Monte Carlo}
-ใช้ OpenGATE 10 (Geant4, \code{G4EmLivermorePhysics}) จำลองภาพรังสีเชิงกรานแบบ AP; แหล่งกำเนิดแกมมา
-mono 80~keV (ยกเว้นการกวาดพลังงาน); วัสดุ \code{G4_BONE_COMPACT_ICRU}; SOD 800~มม., ODD 400~มม.
-แบบจำลองแยกโฟตอนที่ระนาบฉากรับเป็นปฐมภูมิ/กระเจิง (จากมุมเบี่ยง $\le0.5^\circ$ และ $|E-E_0|\le1$~keV)
-แล้วคำนวณแผนที่ SPR; รอยแตก 4 ขนาด: ช่องว่าง 0.306 / 0.43 / 0.54 / 1.0~มม.
+ใช้ OpenGATE 10 (Geant4) จำลองภาพรังสีเชิงกรานแบบ AP; แยกโฟตอนที่ระนาบฉากรับเป็นปฐมภูมิ/กระเจิงแล้วคำนวณ
+แผนที่ SPR พารามิเตอร์มาตรฐานทั้งหมดแสดงในตาราง~\ref{tab:params}
 
-\subsection{Matched control --- ตัด confound ของ mesh (จุดสำคัญ)}
-การวิเคราะห์เบื้องต้นพบว่าการเทียบโมเดล ``ปกติ'' กับ ``รอยแตก'' ที่เป็น\textbf{คนละ mesh กัน} ทำให้ผลต่าง
-$\Delta\mathrm{SPR}$ ถูกครอบงำด้วยความต่างของ tessellation ทั้งก้อน มิใช่รอยแตก จึงสร้าง
-\textbf{matched control} = mesh เดียวกับ fracture แต่ ``ถม'' ร่องด้วยกระดูก (boolean union) ผ่านการตรวจสอบว่า
-control กับ fracture ตรงกันทุกจุด\textbf{นอกบริเวณร่อง} (คลาดเคลื่อน 0.0000~มม.\ จากจุดยอด $>$349{,}000 จุด)
-$\Rightarrow$ $\Delta\mathrm{SPR}=\mathrm{SPR}_{\text{fracture}}-\mathrm{SPR}_{\text{control}}$
-\textbf{แยกเฉพาะผลของรอยแตกล้วน ๆ}
-
-\subsection{Multi-seed significance + a-priori ROI}
-รันกระบวนการซ้ำด้วยเมล็ดสุ่มอิสระ $N$ ชุด (control+fracture ใช้ seed เดียวกันต่อ realization = common random
-numbers) แล้วทดสอบว่าค่าเฉลี่ย $\Delta\mathrm{SPR}$ ที่ ROI ต่างจาก 0 หรือไม่:
-\[ t=\frac{\overline{\Delta\mathrm{SPR}}}{s/\sqrt{N}},\qquad \mathrm{df}=N-1 \]
-โดยกำหนด ROI 16$\times$16~พิกเซล ที่ตำแหน่งร่อง\textbf{ก่อนดูผล} (a-priori) เทียบกับ background ROI;
-\textbf{บีบลำแสง (collimation, field 40~มม.)} เพื่อเพิ่มโฟตอน/พิกเซล ($\sim$3{,}600) ที่บริเวณร่อง
-
-\subsection{ระบบคำนวณ}
-พัฒนาระบบงานทางไกล (job server + worker) ที่กระจายงานแบบ multi-process (sharding) และรองรับการสั่งงาน
-ผ่านเซิร์ฟเวอร์ ทำให้ทำ parameter sweep ได้อย่างเป็นระบบและทำซ้ำได้ --- การทดลองทั้งหมดในรายงานนี้รันบน
-ระบบดังกล่าว
-
-% ================= 3. RESULTS =================
-\section{ผลการดำเนินการ (6 เสาหลัก)}
-
-\subsection{การตรวจพบ (CL-0)}
-ที่ 8 seeds ต่อขนาด: ตรวจพบรอยแตก\textbf{ครบทั้ง 4 ขนาด} ($p<0.02$ ทุกขนาด) โดย $\Delta\mathrm{SPR}<0$
-(ช่องอากาศ $\to$ primary ทะลุมากขึ้น $\to$ SPR ต่ำลง --- สอดคล้องฟิสิกส์) และ background ROI เป็น null
-(สัญญาณเฉพาะที่ร่อง) สัญญาณโตในช่วง 0.306$\to$0.54~มม.\ แล้วเข้าสู่ระดับอิ่มตัว
-
-\begin{table}[h]\centering\small
-\renewcommand{\arraystretch}{1.2}
-\begin{tabular}{c c c c c}
-\rowcolor{softgray} ขนาดร่อง & $\Delta$SPR (ROI) & $|t|$ & $p$ & background \\
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.15}
+\caption{พารามิเตอร์การจำลองมาตรฐาน (baseline)}\label{tab:params}
+\begin{tabular}{ll@{\hskip 2em}ll}
+\toprule
+\thd{พารามิเตอร์} & \thd{ค่า} & \thd{พารามิเตอร์} & \thd{ค่า} \\
 \midrule
-0.306 มม. & $-3.3\times10^{-5}$ & 3.12 & 0.017 & null \\
-0.43 มม.\  & $-3.4\times10^{-5}$ & 3.66 & 0.008 & null \\
-0.54 มม.\  & $-4.9\times10^{-5}$ & 4.84 & 0.002 & null \\
-1.0 มม.\   & $-4.2\times10^{-5}$ & 4.32 & 0.004 & null \\
+Engine & OpenGATE 10 (Geant4) & \code{sod} & 800 มม. \\
+Physics list & \code{G4EmLivermorePhysics} & \code{odd} & 400 มม. \\
+พลังงาน (\code{energy_keV}) & 80 keV (mono) & \code{film_xy} & 400 มม. \\
+วัสดุ & \code{G4_BONE_COMPACT_ICRU} & \code{pix} & 256 \\
+โฟตอน (\code{photons}) & 2{,}000{,}000 & \code{field_mm} & 40 (collimated) \\
+primary criteria & $\le0.5^\circ$, $|E-E_0|\le1$ keV & \code{obj_dx, obj_dy} & $-21.5, -22.3$ มม. \\
+\code{mode} & \code{max} (multi-process) & โฟตอน/พิกเซล & $\sim$3{,}600 \\
 \bottomrule
 \end{tabular}
 \end{table}
-\vspace{-2pt}
-\noindent นอกจากนี้พบว่า\textbf{ตัวชี้วัดเชิงพื้นผิว (local variance, entropy) ตรวจไม่พบสัญญาณ} เพราะรอยแตก
-ทำให้ SPR เลื่อนระดับแบบสม่ำเสมอ (mean shift) ซึ่งตัวชี้วัดความแปรปรวน invariant โดยธรรมชาติ
-($\mathrm{STD}(x+c)=\mathrm{STD}(x)$) $\Rightarrow$ \textbf{observable ที่ถูกต้องคือระดับ SPR เอง}
+
+\subsection{Matched control --- ตัด confound ของ mesh (จุดสำคัญ)}
+การเทียบโมเดล ``ปกติ'' กับ ``รอยแตก'' ที่เป็น\textbf{คนละ mesh กัน} ทำให้ $\Delta\mathrm{SPR}$ ถูกครอบงำด้วยความต่าง
+ของ tessellation ทั้งก้อน จึงสร้าง \textbf{matched control} = mesh เดียวกับ fracture แต่ ``ถม'' ร่องด้วยกระดูก
+(boolean union ผ่าน \code{manifold3d}) แต่ละตัวผ่านการตรวจสอบว่า control ตรงกับ fracture ทุกจุด\textbf{นอกร่อง}
+(คลาดเคลื่อน 0.0000~มม.\ จากจุดยอด $>$349{,}000 จุด) $\Rightarrow$
+$\Delta\mathrm{SPR}=\mathrm{SPR}_{\text{fracture}}-\mathrm{SPR}_{\text{control}}$ แยกเฉพาะผลของรอยแตก
+คู่โมเดลและปริมาตรกระดูกที่ถมแสดงในตาราง~\ref{tab:models}
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.15}
+\caption{คู่โมเดล fracture / matched control และปริมาตรที่ถม}\label{tab:models}
+\begin{tabular}{c l l c}
+\toprule
+\thd{ขนาดร่อง} & \thd{fracture STL} & \thd{matched control STL} & \thd{ปริมาตรถม} \\
+\midrule
+0.306 มม. & \code{0.306x1000.stl} & \code{0.306_filled_control.stl} & 0.083 cm$^3$ \\
+0.43 มม.\  & \code{0.43x1000.stl}  & \code{0.43x1000_filled_control.stl} & 0.099 cm$^3$ \\
+0.54 มม.\  & \code{0.54x1000.stl}  & \code{0.54x1000_filled_control.stl} & 0.110 cm$^3$ \\
+1.0 มม.\   & \code{1mmx1000.stl}   & \code{1mmx1000_filled_control.stl} & 0.124 cm$^3$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Multi-seed significance + a-priori ROI}
+รันซ้ำด้วยเมล็ดสุ่มอิสระ $N$ ชุด (control+fracture ใช้ seed เดียวกันต่อ realization = common random numbers)
+แล้วทดสอบว่าค่าเฉลี่ย $\Delta\mathrm{SPR}$ ที่ ROI ต่างจาก 0 หรือไม่:
+\[ t=\frac{\overline{\Delta\mathrm{SPR}}}{s/\sqrt{N}},\qquad \mathrm{df}=N-1;\qquad
+   \text{s.e.}\propto\tfrac{1}{\sqrt{N_{\text{seeds}}}},\quad \text{MC noise}\propto\tfrac{1}{\sqrt{N_{\text{photons}}}} \]
+กำหนด ROI 16$\times$16~พิกเซล ที่ตำแหน่งร่อง\textbf{ก่อนดูผล} (a-priori) เทียบ background ROil;
+บีบลำแสง (collimation) เพื่อเพิ่มโฟตอน/พิกเซลที่บริเวณร่อง; ระบบงานทางไกล (job server + worker) กระจายงาน
+แบบ multi-process ทำให้ทำ parameter sweep ได้อย่างเป็นระบบและทำซ้ำได้
+
+% ================= 3. RESULTS =================
+\section{ผลการดำเนินการ --- CL-0: การตรวจพบ}
+ที่ 8 seeds ต่อขนาด: ตรวจพบรอยแตก\textbf{ครบทั้ง 4 ขนาด} ($p<0.02$) โดย $\Delta\mathrm{SPR}<0$ (ช่องอากาศ $\to$
+primary ทะลุมากขึ้น $\to$ SPR ต่ำลง) และ background เป็น null
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\caption{CL-0 --- นัยสำคัญที่ ROI ร่อง (matched control, $N=8$)}\label{tab:cl0}
+\begin{tabular}{c c c c c c}
+\toprule
+\thd{ขนาดร่อง} & \thd{$\Delta$SPR (ROI)} & \thd{$t$} & \thd{$p$} & \thd{background $t$} & \thd{background $p$} \\
+\midrule
+0.306 มม. & $-3.33\times10^{-5}$ & $-3.12$ & 0.017 & $+0.10$ & 0.93 \\
+0.43 มม.\  & $-3.43\times10^{-5}$ & $-3.66$ & 0.008 & $-0.77$ & 0.47 \\
+0.54 มม.\  & $-4.90\times10^{-5}$ & $-4.84$ & 0.002 & $-0.59$ & 0.57 \\
+1.0 มม.\   & $-4.16\times10^{-5}$ & $-4.32$ & 0.004 & $+1.12$ & 0.30 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.86\textwidth]{fig/trend.png}
-\caption{เส้นโค้ง detectability: ความแรง $|t|$ (ซ้าย) และขนาดสัญญาณ $|\Delta$SPR$|$ (ขวา) เทียบขนาดรอยแตก ---
-ขึ้นในช่วง 0.3--0.5~มม.\ แล้วอิ่มตัว}
+\includegraphics[width=0.82\textwidth]{fig/trend.png}
+\caption{CL-0 เส้นโค้ง detectability: $|t|$ (ซ้าย) และ $|\Delta$SPR$|$ (ขวา) เทียบขนาด --- ขึ้น 0.3--0.5~มม.\ แล้วอิ่มตัว}
+\end{figure}
+\begin{figure}[h]\centering
+\includegraphics[width=0.72\textwidth]{fig/sigmap.png}
+\caption{CL-0 แผนที่ $\Delta$SPR เฉลี่ย (ซ้าย) และ $t$-map ต่อพิกเซล (ขวา) ของรอยแตก 0.54~มม.; กรอบเขียว = ROI}
 \end{figure}
 
-\subsection{ความ robust และกำลังทางสถิติ (CL-1)}
-Bootstrap 95\% CI ของ $\Delta\mathrm{SPR}$ \textbf{ตัดค่า 0 ทุกขนาด} (การตรวจพบไม่ใช่ความบังเอิญ) แต่รอยแตก
-เล็กสุด (0.306~มม.) ยัง\textbf{ก้ำกึ่ง}ที่ $N=8$ (ความน่าเชื่อถือ 80\%) การวิเคราะห์กำลังชี้ว่าต้องการ $\sim$13 seeds
-เพื่อยืนยันที่ $p<0.01$ --- \textbf{จึงรันยืนยันจริงที่ $N=30$ ได้ผล $p=0.00004$ ($t=-4.86$, reliability 99\%)}
-ยืนยันการตรวจพบรอยแตกเล็กสุดอย่างเด็ดขาด
+\subsection{ตัวชี้วัดเชิงพื้นผิวตรวจไม่พบ (การเลือก observable)}
+ทดสอบ local variance (dSTD) และ local entropy (dEntropy) บนแผนที่ SPR --- \textbf{ทั้งคู่ตรวจไม่พบสัญญาณ}
+เพราะรอยแตกทำให้ SPR เลื่อนระดับสม่ำเสมอ (mean shift) ซึ่งตัวชี้วัดความแปรปรวน invariant โดยธรรมชาติ
+($\mathrm{STD}(x+c)=\mathrm{STD}(x)$); การถอด high-pass ก็ไม่ช่วย (ตาราง~\ref{tab:texture}) $\Rightarrow$
+\textbf{observable ที่ถูกต้องคือระดับ SPR เอง}
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\caption{CL-0 --- เทียบตัวชี้วัด: dSPR vs texture ($t$, $p$ ที่ ROI ร่อง, $N=8$)}\label{tab:texture}
+\begin{tabular}{c c c c}
+\toprule
+\thd{ขนาด} & \thd{dSPR} & \thd{Variance (dSTD)} & \thd{Local entropy} \\
+\midrule
+0.306 มม. & $t=-3.12$, $p=0.017$ & $t=+0.81$, $p=0.45$ & $t=+1.15$, $p=0.29$ \\
+0.43 มม.\  & $t=-3.66$, $p=0.008$ & $t=-0.36$, $p=0.73$ & $t=+0.43$, $p=0.68$ \\
+0.54 มม.\  & $t=-4.84$, $p=0.002$ & $t=-0.14$, $p=0.89$ & $t=+1.25$, $p=0.25$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ---------- CL-1 ----------
+\section{CL-1: ความ robust และกำลังทางสถิติ}
+Bootstrap 95\% CI ของ $\Delta\mathrm{SPR}$ ตัดค่า 0 ทุกขนาด แต่ 0.306~มม.\ ยังก้ำกึ่งที่ $N=8$ (ตาราง~\ref{tab:cl1boot})
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\caption{CL-1 --- ความ robust (bootstrap 20{,}000 resamples, $N=8$)}\label{tab:cl1boot}
+\begin{tabular}{c c c c c c}
+\toprule
+\thd{ขนาด} & \thd{$\Delta$SPR} & \thd{95\% CI ($\times10^{-5}$)} & \thd{ความน่าเชื่อถือ} & \thd{$t$} & \thd{$p$} \\
+\midrule
+0.306 มม. & $-3.33\times10^{-5}$ & $[-5.27,\,-1.34]$ & 80\% & $-3.12$ & 0.017 \\
+0.43 มม.\  & $-3.43\times10^{-5}$ & $[-5.05,\,-1.71]$ & 93\% & $-3.66$ & 0.008 \\
+0.54 มม.\  & $-4.90\times10^{-5}$ & $[-6.84,\,-3.16]$ & 100\% & $-4.84$ & 0.002 \\
+1.0 มม.\   & $-4.16\times10^{-5}$ & $[-5.81,\,-2.34]$ & 96\% & $-4.32$ & 0.004 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{การลู่เข้าตามจำนวน seed}
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\caption{CL-1 --- $t$ สะสมเมื่อใช้ seed $n=2\dots8$}\label{tab:cumseed}
+\begin{tabular}{c ccccccc}
+\toprule
+\thd{ขนาด} & \thd{$n{=}2$} & \thd{3} & \thd{4} & \thd{5} & \thd{6} & \thd{7} & \thd{8} \\
+\midrule
+0.306 & $-4.65$ & $-1.49$ & $-2.23$ & $-2.04$ & $-2.06$ & $-2.57$ & $-3.12$ \\
+0.43  & $-4.24$ & $-4.69$ & $-3.06$ & $-2.27$ & $-2.50$ & $-3.12$ & $-3.66$ \\
+0.54  & $-2.43$ & $-3.91$ & $-4.42$ & $-4.35$ & $-4.21$ & $-5.08$ & $-4.84$ \\
+1.0   & $-5.03$ & $-8.74$ & $-6.64$ & $-8.24$ & $-3.78$ & $-3.70$ & $-4.32$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.60\textwidth]{fig_cl1/confirm.png}
-\caption{การรันยืนยันจริง: $|t|$ ของ 0.306~มม.\ เมื่อสะสม seed ถึง $N=30$ (ดาวเขียว) พ้นเส้น $p=0.01$ ชัดเจน}
+\includegraphics[width=0.48\textwidth]{fig_cl1/forest.png}\hfill
+\includegraphics[width=0.48\textwidth]{fig_cl1/converge.png}
+\caption{CL-1 ซ้าย: bootstrap 95\% CI (ตัด 0 ทุกขนาด); ขวา: การลู่เข้าของ $t$ ตามจำนวน seed}
 \end{figure}
-\noindent ส่วนภาวะอิ่มตัว (plateau) ระหว่าง 0.54 กับ 1.0~มม.\ \textbf{แยกไม่ออกทางสถิติ} ($p=0.48$) และการแยก
-ด้วย ROI-mean ต้องใช้ถึง $\sim$111 seeds --- นำไปสู่ CL-7
 
-\subsection{ความถูกต้องของระเบียบวิธี (CL-2)}
-ทดสอบ false-positive rate ด้วย 3 วิธีอิสระ: (1)~\textbf{control-vs-control} (แทน fracture ด้วย control อีกชุด)
-ให้ FPR $=5.6$--$5.8\%\approx$ ค่าที่กำหนด $\alpha{=}5\%$; (2)~\textbf{sign-flip permutation} ยืนยันนัยสำคัญ
-แบบ non-parametric; (3)~\textbf{spatial} --- พิกเซลนัยสำคัญในลำแสงอยู่ระดับ chance ($\sim$5\%) และเกาะกลุ่มที่ร่อง
-$\Rightarrow$ ไม่มี global artifact $\Rightarrow$ \textbf{การตรวจพบเป็นของจริง มิใช่สิ่งประดิษฐ์ของ pipeline}
+\subsection{การวิเคราะห์กำลังและภาวะอิ่มตัว}
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\caption{CL-1 --- power analysis (seed ที่ต้องใช้)}\label{tab:power}
+\begin{tabular}{l c c}
+\toprule
+\thd{เป้าหมาย} & \thd{effect size $d$} & \thd{$N$ ที่ต้องใช้} \\
+\midrule
+ยืนยัน 0.306 มม.\ (power 0.9, $\alpha{=}0.05$) & 1.10 & $\approx$\,9 \\
+ยืนยัน 0.306 มม.\ (power 0.9, $\alpha{=}0.01$) & 1.10 & $\approx$\,13 \\
+แยก 0.54 vs 1.0 (power 0.8, $\alpha{=}0.05$) & 0.27 & $\approx$\,111 \\
+\bottomrule
+\end{tabular}
+\end{table}
+ภาวะอิ่มตัว: ผลต่างจับคู่ $\Delta(1.0-0.54)=+7.4\times10^{-6}$, $t=+0.75$, $p=0.48$ (แยกไม่ออก) --- นำสู่ CL-7
+
+\subsection{การรันยืนยันจริงที่ \texorpdfstring{$N=30$}{N=30}}
+รัน 0.306~มม.\ ที่ \code{n_seeds=30} (job \code{20260711-173809}): $\Delta\mathrm{SPR}=-3.23\times10^{-5}$,
+\textbf{$t=-4.86$, $p=0.00004$}, reliability $80\%\to99\%$, background $t=-1.33$ ($p=0.19$, null)
+--- ยืนยันรอยแตกเล็กสุดเด็ดขาด (convergence $t$ ที่ $N=5,10,15,20,25,30 = -4.67,-6.56,-6.39,-4.28,-4.02,-4.86$)
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.86\textwidth]{fig_cl2/calib.png}
-\caption{Null calibration: การกระจาย $p$-value ของ control-vs-control เกือบ uniform โดยมีเพียง $\sim$5\% ที่
-$p<0.05$ (แถบแดง) = การทดสอบ calibrate ถูกต้อง}
+\includegraphics[width=0.47\textwidth]{fig_cl1/power.png}\hfill
+\includegraphics[width=0.47\textwidth]{fig_cl1/confirm.png}
+\caption{CL-1 ซ้าย: power vs $N$ (0.306 ถึง power 0.9 ใน $\sim$13 seeds; plateau ต้อง $\sim$111); ขวา: การยืนยันจริง $N=30$ (ดาวเขียว พ้น $p=0.01$)}
 \end{figure}
 
-\subsection{ขอบเขตเชิงกายภาพ --- การอิ่มตัว (CL-7)}
-วิเคราะห์ว่า plateau เกิดจาก ROI ขนาดคงที่เจือจางสัญญาณ หรือเป็นการอิ่มตัวจริง โดยวัด\textbf{สัญญาณรวม
-(integrated)} ซึ่งจะโตต่อถ้าเป็นเพียงการเจือจาง ผลปรากฏว่า\textbf{สัญญาณรวมก็อิ่มตัว} ($0.54\approx1.0$, $p=0.73$)
-$\Rightarrow$ \textbf{plateau เป็นการอิ่มตัวเชิงกายภาพจริง} --- SPR ตรวจ\textbf{การมีอยู่}ของรอยแตกได้ไว
-(threshold $\sim$0.3~มม.) แต่\textbf{ความไวต่อความกว้าง}อิ่มตัวเกิน $\sim$0.5~มม.
+% ---------- CL-2 ----------
+\section{CL-2: ความถูกต้องของระเบียบวิธี (Null / False-positive)}
+ทดสอบ false-positive rate 3 วิธีอิสระบนข้อมูล CL-0 (ตาราง~\ref{tab:cl2})
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.25}
+\caption{CL-2 --- การทดสอบ validity}\label{tab:cl2}
+\begin{tabular}{l c c c}
+\toprule
+\thd{การทดสอบ} & \thd{0.306 มม.} & \thd{0.54 มม.} & \thd{เกณฑ์ผ่าน} \\
+\midrule
+2.1 sign-flip permutation ($p$) & 0.016 & 0.004 & $<0.05$ \\
+2.2 control-vs-control FPR & \textbf{5.6\%} & \textbf{5.8\%} & $\approx5\%$ \\
+2.3 spatial (in-beam significant) & 4\% & 5\% & $\approx$ chance, กระจุกที่ร่อง \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.62\textwidth]{fig_cl7/integrated.png}
-\caption{สัญญาณรวม (แกนซ้าย) และ ROI-mean $|t|$ (แกนขวา) --- ทั้งคู่ขึ้นในช่วง 0.3--0.5~มม.\ แล้วเข้าสู่แถบอิ่มตัว}
+\includegraphics[width=0.88\textwidth]{fig_cl2/calib.png}
+\caption{CL-2 null calibration: การกระจาย $p$-value ของ control-vs-control เกือบ uniform (แถบแดง $=p<0.05$ มี $\sim$5\%)}
 \end{figure}
+\begin{figure}[h]\centering
+\includegraphics[width=0.60\textwidth]{fig_cl2/perm.png}\hfill
+\includegraphics[width=0.36\textwidth]{fig_cl2/spatial.png}
+\caption{CL-2 ซ้าย: sign-flip permutation ($t$ ที่สังเกตอยู่ปลายหาง); ขวา: $t$-map ในลำแสง (กระจุกที่ร่อง ไม่มี global artifact)}
+\end{figure}
+\noindent\textbf{สรุป CL-2:} FPR $\approx5\%$ ตามค่าที่กำหนด, การตรวจพบยืนยันแบบ non-parametric, ไม่มี global artifact
+$\Rightarrow$ การตรวจพบใน CL-0/CL-1 เป็นของจริง
 
-\subsection{การพึ่งพาพลังงาน (CL-3)}
-กวาดพลังงาน 40--120~keV (0.54~มม., 10 seeds/พลังงาน) พบหลักฐาน\textbf{สองอย่างที่สอดคล้องกับฟิสิกส์}:
-(1)~\textbf{สัญญาณแรงสุดที่ 40~keV} (median $-9.7$ vs $-3.9\times10^{-5}$ เทียบพลังงานสูง, $p=0.0001$) ตามที่
-photoelectric ($\mu_{\text{bone}}\propto 1/E^3$) ทำนาย; (2)~\textbf{baseline SPR ลดลง monotonic} ตามพลังงาน
-($\rho=-1.00$, $p<0.001$) อย่างไรก็ตามโครงสร้างละเอียด 60--120~keV มี noise สูงที่ $N=10$ (E=60 มี 3 seeds
-เป็นบวก $\to$ ไม่ถึงนัยสำคัญ) \textbf{เส้นโค้งเชิงปริมาณจึงยังไม่คมชัด}
+% ---------- CL-7 ----------
+\section{CL-7: ขอบเขตเชิงกายภาพ (Plateau resolution)}
+ทดสอบว่า plateau เป็น ROI เจือจางหรืออิ่มตัวจริง โดยวัดสัญญาณรวม (integrated, $r<8$) ต่อ seed (ตาราง~\ref{tab:cl7})
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.25}
+\caption{CL-7 --- สัญญาณรวมเทียบขนาด (mean$\pm$SEM, $N=8$)}\label{tab:cl7}
+\begin{tabular}{c c c}
+\toprule
+\thd{ขนาด} & \thd{integrated $-\Delta$SPR ($\times10^{-3}$)} & \thd{ROI-mean $|t|$ (CL-0)} \\
+\midrule
+0.306 มม. & $5.3\pm2.1$ & 3.12 \\
+0.43 มม.\  & $8.2\pm1.9$ & 3.66 \\
+0.54 มม.\  & $10.4\pm2.4$ & 4.84 \\
+1.0 มม.\   & $9.4\pm1.6$ & 4.32 \\
+\bottomrule
+\end{tabular}
+\end{table}
+สัญญาณรวมก็อิ่มตัว (plateau test 1.0 vs 0.54: $t=-0.36$, $p=0.73$) $\Rightarrow$ \textbf{plateau เป็นการอิ่มตัว
+เชิงกายภาพ} --- SPR ไวต่อ ``การมีอยู่'' (threshold $\sim$0.3~มม.) แต่ความไวต่อ ``ความกว้าง'' อิ่มตัวเกิน $\sim$0.5~มม.
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.88\textwidth]{fig_cl3/energy.png}
-\caption{ซ้าย: $|\Delta$SPR$|$ แรงสุดที่ 40~keV (photoelectric regime); ขวา: baseline SPR ลดลง monotonic ตามพลังงาน}
+\includegraphics[width=0.42\textwidth]{fig_cl7/profiles.png}\hfill
+\includegraphics[width=0.42\textwidth]{fig_cl7/integrated.png}
+\caption{CL-7 ซ้าย: โปรไฟล์เชิงรัศมีของแอ่ง (ทุกขนาด); ขวา: สัญญาณรวม + ROI-mean $|t|$ อิ่มตัวพร้อมกัน}
+\end{figure}
+\begin{figure}[h]\centering
+\includegraphics[width=0.95\textwidth]{fig_cl7/montage.png}
+\caption{CL-7 แผนที่ $\Delta$SPR เฉลี่ย (zoom ที่ร่อง) ทั้ง 4 ขนาด --- แอ่งปรากฏทุกขนาด เข้มสุด $\sim$0.5~มม.}
 \end{figure}
 
-\subsection{การพึ่งพามุมลำแสง (CL-6)}
-กวาดมุม $\pm30^\circ$ (0.54~มม., 10 seeds/มุม, จัดตำแหน่งร่องให้อยู่กลางลำแสงทุกมุม): สัญญาณ\textbf{ตรวจพบได้ทุกมุม}
-(เครื่องหมายถูก, 5/6 มีนัยสำคัญ) และ\textbf{$|\Delta$SPR$|$ แรงขึ้น monotonic ตามการเอียง} ($3.4\to6.8\times10^{-5}$
-เมื่อ $|\theta|\to30^\circ$) ตรงทิศที่แบบจำลองเส้นทางอากาศทำนาย (เอียงเข้าหา tangential $\to$ air-path ยาวขึ้น)
-\textbf{แต่ยังไม่ถึงนัยสำคัญที่ $N=10$} ($p=0.19$) และมุมสุดขอบ $\theta=-30^\circ$ ถูกตัดออก (artifact เชิงเรขาคณิต
-จากการเลื่อนวัตถุมากเกิน) $\Rightarrow$ \textbf{สนับสนุนเชิงบ่งชี้ (suggestive) แต่ยังไม่ conclusive}
+% ---------- CL-3 ----------
+\section{CL-3: การพึ่งพาพลังงาน (Spectral)}
+กวาดพลังงาน 40--120~keV (0.54~มม., 10 seeds/พลังงาน) --- ผลสรุปในตาราง~\ref{tab:cl3} และข้อมูล per-seed
+ในตาราง~\ref{tab:cl3seed}
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.25}
+\caption{CL-3 --- การพึ่งพาพลังงาน (สรุป)}\label{tab:cl3}
+\begin{tabular}{c c c c c c}
+\toprule
+\thd{$E$ (keV)} & \thd{$\Delta$SPR} & \thd{median} & \thd{$|t|$} & \thd{$p$} & \thd{baseline SPR} \\
+\midrule
+40  & $-9.0\times10^{-5}$ & $-9.7$ & 6.46 & \textbf{0.0001} & $2.01\times10^{-3}$ \\
+60  & $-2.3\times10^{-5}$ & $-3.0$ & 1.55 & 0.157 (ns) & $1.58\times10^{-3}$ \\
+80  & $-3.4\times10^{-5}$ & $-3.5$ & 3.02 & 0.015 & $1.43\times10^{-3}$ \\
+100 & $-3.4\times10^{-5}$ & $-4.1$ & 4.30 & 0.002 & $1.32\times10^{-3}$ \\
+120 & $-5.1\times10^{-5}$ & $-4.8$ & 8.28 & \textbf{$<$0.001} & $1.23\times10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]\centering\scriptsize\renewcommand{\arraystretch}{1.2}
+\caption{CL-3 --- ข้อมูล per-seed $\Delta$SPR ($\times10^{-5}$, $N=10$)}\label{tab:cl3seed}
+\begin{tabular}{c p{9.6cm} c}
+\toprule
+\thd{$E$} & \thd{ค่าต่อ seed} & \thd{mean} \\
+\midrule
+40  & $-9.3,\,-2.0,\,-15.2,\,-11.0,\,-10.7,\,-1.0,\,-9.2,\,-13.0,\,-10.1,\,-8.7$ & $-9.0$ \\
+60  & $+4.6,\,+4.4,\,-1.1,\,-3.9,\,-2.5,\,-8.0,\,-3.5,\,-8.7,\,-5.8,\,+1.6$ & $-2.3$ \\
+80  & $-6.1,\,+3.1,\,-8.3,\,+0.8,\,-5.3,\,-1.2,\,-2.8,\,-6.9,\,-3.8,\,-3.2$ & $-3.4$ \\
+100 & $-6.2,\,-4.5,\,-6.0,\,+0.5,\,+0.1,\,-3.3,\,-4.7,\,-5.0,\,-3.7,\,-0.8$ & $-3.4$ \\
+120 & $-6.4,\,-3.8,\,-4.2,\,-5.7,\,-4.5,\,-5.8,\,-3.0,\,-9.7,\,-3.3,\,-5.1$ & $-5.1$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+\noindent หลักฐานสองอย่างสอดคล้องฟิสิกส์: (1)~สัญญาณแรงสุดที่ 40~keV (E=40 vs $\ge60$: median $-9.7$ vs $-3.9$,
+$p=0.0001$) ตาม photoelectric; (2)~baseline SPR ลดลง monotonic (Spearman $\rho=-1.00$, $p<0.001$)
+ข้อจำกัด: 60--120~keV noisy ($E=60$ มี 3 seeds เป็นบวก $\to$ ไม่ถึงนัยสำคัญ) เส้นโค้งเชิงปริมาณจึงยังไม่คมชัด
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.60\textwidth]{fig_cl3/energy.png}\hfill
+\includegraphics[width=0.37\textwidth]{fig_cl3/perseed.png}
+\caption{CL-3 ซ้าย: $|\Delta$SPR$|$ แรงสุดที่ 40~keV + baseline monotonic; ขวา: การกระจาย per-seed ($E{=}60$ มี seeds บวก)}
+\end{figure}
+
+% ---------- CL-6 ----------
+\section{CL-6: การพึ่งพามุมลำแสง (Beam-angle / orientation)}
+กวาดมุม $\pm30^\circ$ (0.54~มม., 10 seeds/มุม) โดยคำนวณตำแหน่ง source และ object shift ต่อมุมเพื่อตรึงร่องไว้
+กลางลำแสง (ตาราง~\ref{tab:cl6geo}); ผลในตาราง~\ref{tab:cl6}
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\caption{CL-6 --- เรขาคณิตต่อมุม (จุดร่อง $q=(21.5,22.3,-62.3)$ มม.; $\mathrm{sod}=800$)}\label{tab:cl6geo}
+\begin{tabular}{c c c c c}
+\toprule
+\thd{$\theta$} & \thd{\code{src_x}} & \thd{\code{src_z}} & \thd{\code{obj_dx}} & \thd{\code{obj_dy}} \\
+\midrule
+$0^\circ$   & $0$      & $-800.0$ & $-21.5$ & $-22.3$ \\
+$+10^\circ$ & $138.9$  & $-787.8$ & $-10.4$ & $-22.3$ \\
+$+20^\circ$ & $273.6$  & $-751.8$ & $+1.1$  & $-22.3$ \\
+$+30^\circ$ & $400.0$  & $-692.8$ & $+12.5$ & $-22.3$ \\
+$-10^\circ$ & $-138.9$ & $-787.8$ & $-32.0$ & $-22.3$ \\
+$-20^\circ$ & $-273.6$ & $-751.8$ & $-41.5$ & $-22.3$ \\
+$-30^\circ$ & $-400.0$ & $-692.8$ & $-49.8$ & $-22.3$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
+\caption{CL-6 --- ผลต่อมุม ($N=10$)}\label{tab:cl6}
+\begin{tabular}{c c c c l}
+\toprule
+\thd{$\theta$} & \thd{$\Delta$SPR} & \thd{$|t|$} & \thd{$p$} & \thd{หมายเหตุ} \\
+\midrule
+$-30^\circ$ & $+21\times10^{-5}$ & 1.75 & 0.114 & \textcolor{warn}{artifact --- ตัดออก} \\
+$-20^\circ$ & $-7.1\times10^{-5}$ & 3.08 & 0.013 & \\
+$-10^\circ$ & $-3.6\times10^{-5}$ & 2.43 & 0.038 & \\
+$0^\circ$   & $-3.4\times10^{-5}$ & 3.02 & 0.015 & \\
+$+10^\circ$ & $-6.4\times10^{-5}$ & 2.04 & 0.071 & \\
+$+20^\circ$ & $-4.7\times10^{-5}$ & 3.11 & 0.013 & \\
+$+30^\circ$ & $-6.8\times10^{-5}$ & 3.77 & \textbf{0.004} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent \textbf{$|\Delta$SPR$|$ เทียบ $|\theta|$ (binned, ตัด $-30^\circ$):} $3.4\to5.0\to5.9\to6.8\times10^{-5}$
+($|\theta|=0,10,20,30$) --- \textbf{เพิ่มขึ้น monotonic} ตรงทิศที่ฟิสิกส์ทำนาย (เอียงเข้าหา tangential $\to$ air-path
+ยาวขึ้น) แต่ linear fit ระดับ per-seed $p=0.19$ (ยังไม่นัยสำคัญที่ $N=10$).
+$\theta=-30^\circ$ ให้ per-seed แกว่งรุนแรง ($+71$,\ $+8$,\ $-16$,\ $+56$,\ $+62$,\ $-38$,\ $+28$,\ $+28$,\ $+46$,\ $-29$)
+เพราะ \code{obj_dx}$=-49.8$ ดันร่องออกนอกบริบทกระดูก --- ขีดจำกัดเชิงเรขาคณิตที่มุมใหญ่
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.88\textwidth]{fig_cl6/angle.png}
-\caption{ซ้าย: $\Delta$SPR เทียบมุม ($-30^\circ$ ตัดออก); ขวา: $|\Delta$SPR$|$ เทียบ $|\theta|$ เพิ่มขึ้น monotonic ตามการเอียง}
+\caption{CL-6 ซ้าย: $\Delta$SPR เทียบมุม ($-30^\circ$ ตัดออก); ขวา: $|\Delta$SPR$|$ เทียบ $|\theta|$ เพิ่มขึ้น monotonic}
 \end{figure}
+\noindent\textbf{สรุป CL-6:} สนับสนุนเชิงบ่งชี้ (suggestive) --- robust ทุกมุม + แรงขึ้นตามการเอียง แต่ยังไม่ conclusive ที่ $N=10$
 
 % ================= 4. SYNTHESIS =================
 \section{สังเคราะห์ --- 6 เสาหลักของ Phase 1}
-\renewcommand{\arraystretch}{1.3}
-\small
+\renewcommand{\arraystretch}{1.3}\small
 \begin{longtable}{c l l c}
 \rowcolor{theme}\color{white}\textbf{CL} & \color{white}\textbf{เสา / คำถาม} & \color{white}\textbf{ผลลัพธ์หลัก} & \color{white}\textbf{สถานะ} \\
-\midrule
-\endhead
+\midrule\endhead
 CL-0 & Detection --- เจอสัญญาณไหม & ตรวจพบครบ 4 ขนาด ($p<0.02$), เครื่องหมายถูก & \pgood \\
 \rowcolor{softgray}
-CL-1 & Robustness \& power --- มั่นคงไหม & CI ตัด 0 ทุกขนาด; 0.306~มม.\ ยืนยัน $p=4\!\times\!10^{-5}$ & \pgood \\
-CL-2 & Validity --- artifact ไหม & false-positive rate $\approx5\%$; ไม่มี global artifact & \pgood \\
+CL-1 & Robustness \& power --- มั่นคงไหม & CI ตัด 0 ทุกขนาด; 0.306 ยืนยัน $p=4\!\times\!10^{-5}$ & \pgood \\
+CL-2 & Validity --- artifact ไหม & FPR $\approx5\%$; ไม่มี global artifact & \pgood \\
 \rowcolor{softgray}
-CL-7 & Physical bound --- plateau คืออะไร & อิ่มตัวเชิงกายภาพ ($>0.5$~มม.); ไวต่อ ``การมีอยู่'' & \pgood \\
+CL-7 & Physical bound --- plateau คืออะไร & อิ่มตัวเชิงกายภาพ ($>0.5$ มม.); ไวต่อ ``การมีอยู่'' & \pgood \\
 CL-3 & Energy --- ตามฟิสิกส์ไหม & แรงสุดที่ E ต่ำ + baseline monotonic; noisy ที่ $N{=}10$ & \pgood \\
 \rowcolor{softgray}
 CL-6 & Geometry --- ตามเรขาคณิตไหม & robust ทุกมุม + แรงขึ้นตามการเอียง; ไม่ conclusive & \ppart \\
@@ -230,45 +428,56 @@ CL-6 & Geometry --- ตามเรขาคณิตไหม & robust ทุ�
 \end{longtable}
 \normalsize
 \begin{verdictbox}{ข้อสรุปรวม Phase 1 (ซื่อตรง)}
-\textbf{สมมติฐานหลักได้รับการสนับสนุนอย่างแข็งแรง:} SPR มีลายเซ็นรอยแตกที่\textbf{จริง, ยืนยันเชิงสถิติ,
-ไม่ใช่ artifact, และมีที่มาเชิงฟิสิกส์} ตรวจพบได้ถึง $\sim$0.3~มม. --- 4 เสาแรก (detection, robustness, validity,
-physical bound) \textbf{มั่นคง}; เสาเชิงกลไก (energy) \textbf{สนับสนุน}; เสาเชิงเรขาคณิต (geometry)
-\textbf{บ่งชี้แต่ยังไม่ conclusive}. ค้นพบที่สำคัญคือ \textbf{SPR เหมาะกับการ ``ตรวจพบ'' รอยแตกมากกว่าการ
-``วัดความกว้าง''} (สัญญาณอิ่มตัวเกิน $\sim$0.5~มม.). โดยรวม \textbf{เป็น proof-of-concept ที่มั่นคงพอสำหรับ
-การพัฒนาต่อใน Phase 2}
+\textbf{สมมติฐานหลักได้รับการสนับสนุนอย่างแข็งแรง:} SPR มีลายเซ็นรอยแตกที่\textbf{จริง, ยืนยันเชิงสถิติ, ไม่ใช่
+artifact, และมีที่มาเชิงฟิสิกส์} ตรวจพบได้ถึง $\sim$0.3~มม. --- 4 เสาแรก (detection, robustness, validity,
+physical bound) \textbf{มั่นคง}; เสา energy \textbf{สนับสนุน}; เสา geometry \textbf{บ่งชี้แต่ยังไม่ conclusive}.
+ค้นพบสำคัญ: \textbf{SPR เหมาะกับการ ``ตรวจพบ'' มากกว่าการ ``วัดความกว้าง''} (สัญญาณอิ่มตัวเกิน $\sim$0.5~มม.).
+โดยรวม \textbf{เป็น proof-of-concept ที่มั่นคงพอสำหรับ Phase 2}
 \end{verdictbox}
 
 % ================= 5. LIMITATIONS =================
 \section{ข้อจำกัด (ระบุอย่างซื่อตรง)}
 \begin{itemize}
-  \item \textbf{ขอบเขตของ observable:} SPR ไวต่อ ``การมีอยู่'' ของรอยแตก แต่\textbf{อิ่มตัวเชิงความกว้าง}เกิน
-        $\sim$0.5~มม.\ (CL-7) --- ไม่เหมาะกับการวัดขนาดรอยแตกใหญ่
-  \item \textbf{สถิติของการทดสอบเชิงกลไก:} CL-3 (พลังงาน) และ CL-6 (มุม) รันที่ $N=10$ ซึ่ง noise สูง ---
-        แนวโน้มตรงทิศที่ทำนายแต่\textbf{ยังไม่ถึงนัยสำคัญเชิงปริมาณ}; ต้องเพิ่มเป็น $N=20$--$30$
-  \item \textbf{ขีดจำกัดเชิงเรขาคณิต:} ที่มุมเอียงมาก (CL-6, $\theta=-30^\circ$) การเลื่อนวัตถุเพื่อจัดร่องให้
-        กลางลำแสงมากเกินไปทำให้เกิด artifact --- ต้องออกแบบการหมุนรอบจุดร่องโดยตรง
-  \item \textbf{ความสมจริงของแบบจำลอง:} ยังเป็นฉากรับอุดมคติ (ไม่รวมประสิทธิภาพเชิงพลังงาน, จุดกระเจิงในฉากรับ),
+  \item \textbf{ขอบเขตของ observable:} SPR ไวต่อ ``การมีอยู่'' แต่\textbf{อิ่มตัวเชิงความกว้าง}เกิน $\sim$0.5~มม.\ (CL-7)
+        --- ไม่เหมาะกับการวัดขนาดรอยแตกใหญ่
+  \item \textbf{สถิติของการทดสอบเชิงกลไก:} CL-3, CL-6 รันที่ $N=10$ ซึ่ง noise สูง --- แนวโน้มตรงทิศที่ทำนายแต่
+        ยังไม่ถึงนัยสำคัญเชิงปริมาณ ($p=0.19$ ใน CL-6); ต้องเพิ่มเป็น $N=20$--$30$
+  \item \textbf{ขีดจำกัดเชิงเรขาคณิต:} มุมเอียงมาก (CL-6, $-30^\circ$) การเลื่อนวัตถุมากเกินทำให้เกิด artifact ---
+        ต้องออกแบบการหมุนรอบจุดร่องโดยตรง
+  \item \textbf{ความสมจริงของแบบจำลอง:} ฉากรับอุดมคติ (ไม่รวมประสิทธิภาพเชิงพลังงาน/จุดกระเจิงในฉากรับ),
         ลำแสง mono (ไม่ใช่สเปกตรัมจริง), รอยแตกตำแหน่ง/ทิศเดียว, ยังไม่เทียบกับข้อมูลภาพจริง
 \end{itemize}
 
 % ================= 6. CONCLUSIONS =================
 \section{สรุปและงานถัดไป (Phase 2)}
-งาน Phase 1 ได้พัฒนา\textbf{ระเบียบวิธีที่ถูกต้อง}สำหรับตรวจวัดลายเซ็นการกระเจิงจากรอยแตก (matched control +
-multi-seed significance) ซึ่งเผยสัญญาณที่การเทียบแบบไร้เดียงสามองไม่เห็น และแสดง\textbf{หลักฐานเชิงประจักษ์}
-ว่าลายเซ็น SPR จากรอยแตกระดับต่ำกว่ามิลลิเมตรตรวจพบได้อย่างมีนัยสำคัญ ยืนยันเชิงสถิติ ไม่ใช่ artifact และ
-มีที่มาเชิงฟิสิกส์ --- เป็นฐานที่มั่นคงสำหรับ:
+Phase 1 ได้พัฒนา\textbf{ระเบียบวิธีที่ถูกต้อง} (matched control + multi-seed significance) ซึ่งเผยสัญญาณที่การเทียบ
+แบบไร้เดียงสามองไม่เห็น และแสดง\textbf{หลักฐานเชิงประจักษ์}ว่าลายเซ็น SPR จากรอยแตกระดับต่ำกว่ามิลลิเมตรตรวจพบได้
+อย่างมีนัยสำคัญ ยืนยันเชิงสถิติ ไม่ใช่ artifact และมีที่มาเชิงฟิสิกส์ --- เป็นฐานสำหรับ:
 \begin{enumerate}
   \item \textbf{ยืนยันเชิงกลไกให้สมบูรณ์:} รัน CL-3/CL-6 ที่ $N=20$--$30$ + ช่วงมุมกว้างขึ้น (จนถึง tangential)
-        เพื่อยกแนวโน้มพลังงาน/มุมให้ถึงนัยสำคัญเชิงปริมาณ
-  \item \textbf{เพิ่มความสมจริง:} ฉากรับเชิงจริง, สเปกตรัมพลังงาน (kVp จริง + filtration), การเทียบกับภาพจริง
-  \item \textbf{ขยายขอบเขต:} ตำแหน่ง/ทิศทางรอยแตกอื่น, บริเวณกายวิภาคอื่น, และ optimization ของพารามิเตอร์
-        (พลังงาน, collimation, air-gap, ความละเอียด) เพื่อ CNR สูงสุด
+  \item \textbf{เพิ่มความสมจริง:} ฉากรับเชิงจริง, สเปกตรัมพลังงาน (kVp + filtration), การเทียบกับภาพจริง
+  \item \textbf{ขยายขอบเขต:} ตำแหน่ง/ทิศทางรอยแตกอื่น, บริเวณกายวิภาคอื่น, optimization (พลังงาน, collimation,
+        air-gap, ความละเอียด) เพื่อ CNR สูงสุด
 \end{enumerate}
+
+% ================= APPENDIX =================
+\appendix
+\section{ภาคผนวก --- พารามิเตอร์การรันและระบบคำนวณ}
+\begin{itemize}
+  \item \textbf{การทดลองและ job:} CL-0/CL-1 ใช้ 8 seeds (0.306 ยืนยัน 30 seeds, job \code{20260711-173809});
+        CL-2/CL-7 วิเคราะห์บนข้อมูล CL-0; CL-3 = 5 พลังงาน $\times$ 10 seeds; CL-6 = 7 มุม $\times$ 10 seeds
+  \item \textbf{seed:} base $=1234567$, stride $=1000003$ ต่อ realization (control+fracture ใช้ seed เดียวกัน)
+  \item \textbf{ROI:} a-priori 16$\times$16 พิกเซล ที่กลางภาพ (128,128); background เลื่อน $\sim$18 พิกเซล
+  \item \textbf{การวิเคราะห์:} $t$-test สองด้าน (df $=N-1$), bootstrap 20{,}000 resamples, sign-flip permutation
+        256 แบบ, power ผ่านการประมาณ normal
+  \item \textbf{ระบบ:} job server (FastAPI + SQLite) + worker (multi-process sharding) บน Windows;
+        เผยแพร่รายงานที่ \url{https://wwaxray.baanwit.com/doc/report/}
+  \item \textbf{ตัวเลข/รูปทั้งหมด} คำนวณจากการรันจริง; รายงานย่อยรายเสา (CL-1, CL-2, CL-3, CL-6, CL-7) มีแยกต่างหาก
+\end{itemize}
 
 \vfill
 \noindent{\color{theme!45}\rule{\linewidth}{0.4pt}}\\
-{\small\color{ink} รายงานฉบับสมบูรณ์ Phase 1. ผลและรูปทั้งหมดคำนวณจากการรันจริง (repository
-\code{intraprasart/GATE-Xray-pelvis-SPR}). รายงานย่อยรายเสา (CL-0…CL-7) และไฟล์นี้เผยแพร่ที่
-https://wwaxray.baanwit.com/doc/report/}
+{\small\color{ink} รายงานฉบับสมบูรณ์ Phase 1 (ฉบับรวมข้อมูลครบ). repository \code{intraprasart/GATE-Xray-pelvis-SPR}.
+เผยแพร่ที่ https://wwaxray.baanwit.com/doc/report/}
 
 \end{document}
