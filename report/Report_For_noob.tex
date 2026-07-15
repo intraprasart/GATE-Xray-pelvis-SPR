@@ -1,4 +1,4 @@
-\documentclass[15pt]{extarticle}
+\documentclass[17pt]{extarticle}
 \usepackage{fontspec}
 \usepackage{geometry}
 \geometry{a4paper, margin=2.1cm}
@@ -51,6 +51,8 @@
 \newcommand{\ex}{\textcolor{ok}{\textbf{ตัวอย่าง:}}\ }
 \newcommand{\rd}{\textcolor{warn}{\textbf{อ่านกราฟ:}}\ }
 \newcommand{\code}[1]{{\ttfamily\detokenize{#1}}}
+\newcommand{\thd}[1]{\cellcolor{theme}\color{white}\textbf{#1}}
+\newcommand{\rtab}{\smallskip\par\textcolor{theme}{\textbf{ตารางผล:}}\par\nopagebreak\smallskip}
 
 \begin{document}
 
@@ -176,6 +178,18 @@ control) แล้ววัดผลต่าง $\Delta$SPR ที่ตำแ�
 \textbf{เห็นสัญญาณจริง}. เครื่องหมายลบ = SPR ``ลดลง'' (สมเหตุผล: ช่องอากาศให้รังสีทะลุมากขึ้น)
 \end{example}
 
+\rtab
+\begin{center}\small\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{c c c c c}
+\thd{ขนาดรอยแตก} & \thd{$\Delta$SPR} & \thd{$t$} & \thd{$p$} & \thd{background} \\
+0.306 มม. & $-3.3\times10^{-5}$ & $-3.12$ & 0.017 & null \\
+0.43 มม.\  & $-3.4\times10^{-5}$ & $-3.66$ & 0.008 & null \\
+0.54 มม.\  & $-4.9\times10^{-5}$ & $-4.84$ & 0.002 & null \\
+1.0 มม.\   & $-4.2\times10^{-5}$ & $-4.32$ & 0.004 & null \\
+\end{tabular}
+\end{center}
+{\small ทุกขนาด $p<0.02$ (เจอสัญญาณ), เครื่องหมายลบ (SPR ลดลง), background = null (สัญญาณอยู่ที่ร่องจริง)}
+
 \begin{figure}[h]\centering
 \includegraphics[width=0.82\textwidth]{fig/trend.png}
 \end{figure}
@@ -197,6 +211,17 @@ $p=0.05$} แปลว่ารอยแตก\textbf{ทุกขนาดต�
 \ex รอยแตก 0.306~มม.: ตอนวัด 8 ครั้ง $p=0.017$ (ก้ำกึ่ง, ความน่าเชื่อถือ 80\%). Power analysis บอกว่าวัด $\sim$13
 ครั้งก็พอ. \textbf{พอวัด 30 ครั้ง ได้ $t=-4.86$, $p=0.00004$} = โอกาสฟลุ๊ค 4 ในแสน $\to$ ยืนยันเด็ดขาด
 \end{example}
+
+\rtab
+\begin{center}\small\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{c c c c}
+\thd{รอยแตก 0.306 มม.} & \thd{$t$} & \thd{$p$} & \thd{ความน่าเชื่อถือ} \\
+วัด 8 ครั้ง (เดิม)   & $-3.12$ & 0.017 & 80\% \\
+\rowcolor{exbg}
+วัด 30 ครั้ง (ยืนยัน) & $-4.86$ & \textbf{0.00004} & 99\% \\
+\end{tabular}
+\end{center}
+{\small ช่วงความเชื่อมั่น 95\% ของทั้ง 4 ขนาด ``ไม่แตะ 0'' ทุกตัว = เห็นสัญญาณจริง; รอยแตกเล็กสุดยืนยันเด็ดขาด}
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.46\textwidth]{fig_cl1/forest.png}\hfill
@@ -220,6 +245,17 @@ $p=0.05$} แปลว่ารอยแตก\textbf{ทุกขนาดต�
 ซื่อสัตย์ ไม่ตื่นตูม
 \end{example}
 
+\rtab
+\begin{center}\small\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{l c c c}
+\thd{การทดสอบ} & \thd{0.306 มม.} & \thd{0.54 มม.} & \thd{ควรได้} \\
+sign-flip permutation ($p$) & 0.016 & 0.004 & $<0.05$ \\
+control-vs-control (ผลบวกลวง) & \textbf{5.6\%} & \textbf{5.8\%} & $\approx5\%$ \\
+พิกเซลนัยสำคัญในลำแสง & 4\% & 5\% & $\approx$ chance \\
+\end{tabular}
+\end{center}
+{\small ผลบวกลวง $\approx5\%$ ตามที่ควรเป็น = เครื่องมือซื่อสัตย์ ไม่สร้างสัญญาณลวง}
+
 \begin{figure}[h]\centering
 \includegraphics[width=0.86\textwidth]{fig_cl2/calib.png}
 \end{figure}
@@ -240,6 +276,18 @@ $p=0.05$} แปลว่ารอยแตก\textbf{ทุกขนาดต�
 \ex สัญญาณรวม: 0.54~มม.\ = 10.4, 1.0~มม.\ = 9.4 (พอ ๆ กัน); เทียบกันได้ $p=0.73$ = \textbf{แยกไม่ออก} $\to$
 สัญญาณรวมก็อิ่มตัวเหมือนกัน = อิ่มตัวจริงเชิงฟิสิกส์
 \end{example}
+
+\rtab
+\begin{center}\small\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{c c c}
+\thd{ขนาดรอยแตก} & \thd{สัญญาณรวม ($\times10^{-3}$)} & \thd{ความแรง $|t|$} \\
+0.306 มม. & $5.3\pm2.1$ & 3.12 \\
+0.43 มม.\  & $8.2\pm1.9$ & 3.66 \\
+0.54 มม.\  & $10.4\pm2.4$ & 4.84 \\
+1.0 มม.\   & $9.4\pm1.6$ & 4.32 \\
+\end{tabular}
+\end{center}
+{\small สัญญาณโต 0.3$\to$0.5~มม.\ แล้วแบน (0.54 vs 1.0: $p=0.73$ แยกไม่ออก) = อิ่มตัวจริง}
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.60\textwidth]{fig_cl7/integrated.png}
@@ -264,6 +312,20 @@ $p=0.0022$ = พลังงานต่ำเห็นรอยแตกชั�
 $\rho=-1.00$ (สวนทางสมบูรณ์)
 \end{example}
 
+\rtab
+\begin{center}\small\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{c c c c c}
+\thd{พลังงาน (keV)} & \thd{$\Delta$SPR} & \thd{$t$} & \thd{$p$} & \thd{SPR พื้นฐาน} \\
+\rowcolor{exbg}
+40  & $-9.0\times10^{-5}$ & 6.46 & \textbf{0.0001} & $2.01\times10^{-3}$ \\
+60  & $-2.3\times10^{-5}$ & 1.55 & 0.16 & $1.58\times10^{-3}$ \\
+80  & $-3.4\times10^{-5}$ & 3.02 & 0.015 & $1.43\times10^{-3}$ \\
+100 & $-3.4\times10^{-5}$ & 4.30 & 0.002 & $1.32\times10^{-3}$ \\
+120 & $-5.1\times10^{-5}$ & 8.28 & $<$0.001 & $1.23\times10^{-3}$ \\
+\end{tabular}
+\end{center}
+{\small แรงสุดที่ 40~keV; SPR พื้นฐานลดลงทุกขั้น ($\rho=-1.00$); within-seed (40 vs $\ge$80): $p=0.0022$}
+
 \begin{figure}[h]\centering
 \includegraphics[width=0.56\textwidth]{fig_cl3/energy.png}\hfill
 \includegraphics[width=0.40\textwidth]{fig_cl3/withinseed.png}
@@ -286,6 +348,20 @@ $\rho=-1.00$ (สวนทางสมบูรณ์)
 \ex ตอนแรกใช้วิธีเทียบข้ามกลุ่ม ได้ $p=0.19$ (ไม่ผ่าน) --- แต่วิธีนั้น\textbf{ไม่เหมาะ}เพราะไม่ได้จับคู่ seed.
 พอใช้ paired ที่ถูกต้อง: 8 ใน 10 seeds ให้สัญญาณที่มุมเอียงแรงกว่ามุมตั้งฉาก, $p=0.028$ $\to$ \textbf{มีนัยสำคัญ}
 \end{example}
+
+\rtab
+\begin{center}\small\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{c c c c}
+\thd{มุมเอียง $\theta$} & \thd{$\Delta$SPR} & \thd{$t$} & \thd{$p$} \\
+$-20^\circ$ & $-7.1\times10^{-5}$ & 3.08 & 0.013 \\
+$-10^\circ$ & $-3.6\times10^{-5}$ & 2.43 & 0.038 \\
+$0^\circ$ (ตั้งฉาก) & $-3.4\times10^{-5}$ & 3.02 & 0.015 \\
+$+10^\circ$ & $-6.4\times10^{-5}$ & 2.04 & 0.071 \\
+$+20^\circ$ & $-4.7\times10^{-5}$ & 3.11 & 0.013 \\
+$+30^\circ$ & $-6.8\times10^{-5}$ & 3.77 & 0.004 \\
+\end{tabular}
+\end{center}
+{\small ($-30^\circ$ ตัดออก = artifact) ยิ่งเอียง $|\Delta$SPR$|$ ยิ่งแรง; within-seed paired: $p=0.028$ (มีนัยสำคัญ)}
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.56\textwidth]{fig_cl6/angle.png}\hfill
