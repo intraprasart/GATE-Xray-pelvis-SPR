@@ -175,7 +175,7 @@ primary ทะลุมากขึ้น $\to$ SPR ต่ำลง) และ b
 \subsection{ตัวชี้วัดเชิงพื้นผิวตรวจไม่พบ (การเลือก observable)}
 ทดสอบ local variance (dSTD) และ local entropy (dEntropy) บนแผนที่ SPR --- \textbf{ทั้งคู่ตรวจไม่พบสัญญาณ}
 เพราะรอยแตกทำให้ SPR เลื่อนระดับสม่ำเสมอ (mean shift) ซึ่งตัวชี้วัดความแปรปรวน invariant โดยธรรมชาติ
-($\mathrm{STD}(x+c)=\mathrm{STD}(x)$); การถอด high-pass ก็ไม่ช่วย (ตาราง~\ref{tab:texture}) $\Rightarrow$
+($\mathrm{STD}(x+c)=\mathrm{STD}(x)$); การถอด high-pass ก็ไม่ช่วย (ตาราง~\ref{tab:texture} และรูป~\ref{fig:texture}) $\Rightarrow$
 \textbf{observable ที่ถูกต้องคือระดับ SPR เอง}
 
 \begin{table}[h]\centering\small\renewcommand{\arraystretch}{1.2}
@@ -190,6 +190,13 @@ primary ทะลุมากขึ้น $\to$ SPR ต่ำลง) และ b
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.78\textwidth]{fig/texture_compare.png}
+\caption{CL-0 --- เทียบความแรง $|t|$ ของ 3 ตัวชี้วัด: เฉพาะ \textbf{dSPR (ระดับ SPR)} อยู่เหนือเส้นเกณฑ์นัยสำคัญ
+(เส้นประแดง, $p=0.05$) ทุกขนาด ส่วน \textbf{Variance และ Local entropy อยู่ต่ำกว่าเส้นทั้งหมด} ($p=0.25$--$0.89$) =
+ตรวจไม่พบสัญญาณรอยแตก}\label{fig:texture}
+\end{figure}
 
 % ---------- CL-1 ----------
 \section{CL-1: ความ robust และกำลังทางสถิติ}
